@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNMP Network Devices | Cyber Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #090b10;
+            --panel: #111620;
+            --panel-2: #0d1118;
+            --border: #263244;
+            --text: #e6edf7;
+            --muted: #8b9bb2;
+            --cyan: #32d5ff;
+            --green: #42f59b;
+            --orange: #ff9f43;
+            --red: #ff5c7a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Consolas, "Courier New", monospace;
+        }
+
+        .shell {
+            width: min(1180px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 28px 0;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 18px;
+            margin-bottom: 22px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(1.3rem, 3vw, 2rem);
+            letter-spacing: 0;
+        }
+
+        nav {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            padding: 9px 12px;
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+
+        nav a.active {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: #102134;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.3fr);
+            gap: 18px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 18px;
+        }
+
+        .panel h2 {
+            margin: 0 0 14px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 130px;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input, select, button {
+            width: 100%;
+            min-height: 42px;
+            background: #121a27;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font: inherit;
+            padding: 8px 10px;
+        }
+
+        button {
+            cursor: pointer;
+            color: var(--cyan);
+            font-weight: 700;
+        }
+
+        button:hover { border-color: var(--cyan); }
+        button:disabled { cursor: wait; color: var(--muted); }
+
+        .target-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 12px;
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        .target {
+            width: 100%;
+            text-align: left;
+            color: var(--text);
+        }
+
+        .target.active {
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 0.82rem;
+            overflow-wrap: anywhere;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .metric {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            min-height: 138px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .metric canvas { max-height: 88px; }
+
+        .metric strong {
+            display: block;
+            font-size: 1.45rem;
+            margin-top: -28px;
+        }
+
+        .metric span, label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+        }
+
+        .chart-box, .device-list, .terminal {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+
+        .device {
+            border-left: 3px solid var(--red);
+            padding: 8px 10px;
+            background: #121827;
+            margin-top: 8px;
+            overflow-wrap: anywhere;
+        }
+
+        .terminal {
+            min-height: 118px;
+            max-height: 170px;
+            overflow: auto;
+            color: var(--green);
+            white-space: pre-wrap;
+            font-size: 0.85rem;
+        }
+
+        .port-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .port {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            gap: 10px;
+            border-left: 3px solid var(--orange);
+            padding: 8px 10px;
+            background: #121827;
+        }
+
+        .split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .log-list, .process-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 10px;
+            max-height: 320px;
+            overflow: auto;
+        }
+
+        .log-row, .process-row {
+            background: #121827;
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--cyan);
+            border-radius: 6px;
+            padding: 9px 10px;
+        }
+
+        .log-row strong, .process-row strong {
+            display: block;
+            overflow-wrap: anywhere;
+        }
+
+        .log-meta, .process-meta {
+            color: var(--muted);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 6px;
+            font-size: 0.8rem;
+        }
+
+        .badge {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            display: inline-flex;
+            font-size: 0.72rem;
+            padding: 3px 7px;
+        }
+
+        .badge.snmp {
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        .badge.arp {
+            border-color: var(--orange);
+            color: var(--orange);
+        }
+
+        @media (max-width: 860px) {
+            header { align-items: flex-start; flex-direction: column; }
+            .grid, .metrics, .controls, .split { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <header>
+            <h1>SNMP Network Devices</h1>
+            <nav aria-label="Primary navigation">
+                <a href="/">This Device</a>
+                <a class="active" href="/network">SNMP Network Devices</a>
+                <a href="/security">Security View</a>
+            </nav>
+        </header>
+
+        <section class="grid">
+            <aside class="panel">
+                <h2>Scan Network Devices</h2>
+                <div class="device">
+    <strong id="deviceCount">0</strong>
+    <div class="muted">Devices Online</div>
+</div>
+                <label for="cidr">Network Range</label>
+                <div class="controls">
+                    <input id="cidr" value="{{ default_cidr }}" inputmode="numeric">
+                    <button id="scanButton" onclick="scanNetwork()">SCAN</button>
+                </div>
+
+                <label for="community">Community</label>
+                <div class="controls">
+                    <input id="community" value="public">
+                    <button id="pollButton" onclick="pollSelected()" disabled>POLL</button>
+                </div>
+
+                <div class="terminal" id="scanLog"></div>
+                <div class="target-list" id="targets"></div>
+            </aside>
+
+            <div class="panel">
+                <h2 id="selectedTitle">Selected Device Metrics</h2>
+                <div class="muted" id="selectedDescription">Scan the network and select an SNMP-enabled device.</div>
+
+                <div class="metrics">
+                    <div class="metric">
+                        <canvas id="cpuGauge"></canvas>
+                        <strong id="cpuValue">N/A</strong>
+                        <span>CPU Usage</span>
+                    </div>
+                    <div class="metric">
+                        <canvas id="ramGauge"></canvas>
+                        <strong id="ramValue">N/A</strong>
+                        <span>RAM Usage</span>
+                    </div>
+                    <div class="metric">
+                        <canvas id="usbGauge"></canvas>
+                        <strong id="usbCount">0</strong>
+                        <span>USB Connections</span>
+                    </div>
+                </div>
+
+                <div class="chart-box"><canvas id="cpuChart" height="95"></canvas></div>
+                <div class="chart-box"><canvas id="ramChart" height="95"></canvas></div>
+                <div class="device-list">
+                    <label>USB Connections Reported by SNMP</label>
+                    <div id="devices"><div class="device">No device selected.</div></div>
+                </div>
+                <div class="device-list">
+                    <label>ARP and Open TCP Ports</label>
+                    <div class="muted" id="macAddress">MAC: Unknown</div>
+                    <div id="ports" class="port-list"><div class="device">No device selected.</div></div>
+                </div>
+                <div class="split">
+                    <div class="device-list">
+                        <label>Device Logs</label>
+                        <div id="deviceLogs" class="log-list"><div class="device">No device selected.</div></div>
+                    </div>
+                    <div class="device-list">
+                        <label>Processes Reported by SNMP</label>
+                        <div id="processes" class="process-list"><div class="device">No device selected.</div></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let selectedIp = '';
+        let selectedIsSnmp = false;
+        const remoteHistory = { cpu: Array(10).fill(0), ram: Array(10).fill(0) };
+
+        const gaugeOptions = (color, max) => ({
+            type: 'doughnut',
+            data: { datasets: [{ data: [0, max], backgroundColor: [color, '#202838'], borderWidth: 0 }] },
+            options: { rotation: -90, circumference: 180, cutout: '78%', plugins: { tooltip: { enabled: false } } }
+        });
+
+        const lineOptions = (color) => ({
+            type: 'line',
+            data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: color, backgroundColor: color + '22', fill: true, tension: 0.35 }] },
+            options: { plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { suggestedMin: 0, suggestedMax: 100, ticks: { color: '#6f8198' }, grid: { color: '#202838' } } } }
+        });
+
+        const cpuGauge = new Chart(document.getElementById('cpuGauge'), gaugeOptions('#32d5ff', 100));
+        const ramGauge = new Chart(document.getElementById('ramGauge'), gaugeOptions('#42f59b', 100));
+        const usbGauge = new Chart(document.getElementById('usbGauge'), gaugeOptions('#ff9f43', 10));
+        const cpuChart = new Chart(document.getElementById('cpuChart'), lineOptions('#32d5ff'));
+        const ramChart = new Chart(document.getElementById('ramChart'), lineOptions('#42f59b'));
+
+        function setGauge(chart, value, max) {
+            const safeValue = Number.isFinite(value) ? value : 0;
+            chart.data.datasets[0].data = [safeValue, Math.max(0, max - safeValue)];
+            chart.update();
+        }
+
+        function scanLog(message) {
+            const logs = document.getElementById('scanLog');
+            logs.textContent += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function renderDevices(devices) {
+            const container = document.getElementById('devices');
+            container.innerHTML = '';
+            if (!devices.length) {
+                const row = document.createElement('div');
+                row.className = 'device';
+                row.textContent = 'No USB/removable devices reported.';
+                container.appendChild(row);
+                return;
+            }
+            devices.forEach(device => {
+                const row = document.createElement('div');
+                row.className = 'device';
+                row.textContent = device;
+                container.appendChild(row);
+            });
+        }
+
+        async function scanNetwork() {
+
+    const button = document.getElementById('scanButton');
+
+    button.disabled = true;
+    button.textContent = 'SCAN...';
+
+    try {
+
+        const cidr =
+            document.getElementById('cidr').value.trim();
+
+        const community =
+            document.getElementById('community').value.trim() || 'public';
+
+        scanLog(`Scanning ${cidr}...`);
+
+        const scanResponse =
+            await fetch(
+                `/api/snmp/scan?cidr=${encodeURIComponent(cidr)}&community=${encodeURIComponent(community)}`
+            );
+
+        const scanData =
+            await scanResponse.json();
+
+        const collectorResponse =
+            await fetch('/api/collector/logs');
+
+        const collectorData =
+            await collectorResponse.json();
+
+        const targets =
+            document.getElementById('targets');
+
+        targets.innerHTML = '';
+
+        const discovered =
+            scanData.targets || [];
+
+        document.getElementById(
+            'deviceCount'
+        ).textContent =
+            discovered.length;
+
+        discovered.forEach(device => {
+
+            const targets =
+    document.getElementById('targets');
+
+            const agentDevice =
+                collectorData.hosts.find(
+                    h => h.ip === device.ip
+                );
+
+            const item =
+                document.createElement('button');
+
+            item.className =
+                'target';
+
+            item.innerHTML = `
+                <strong>${device.name || device.ip}</strong>
+                <div class="muted">${device.ip}</div>
+                <div class="muted">
+                    ${
+                        agentDevice
+                        ? '🟢 Agent Connected'
+                        : '🟡 Discovery Only'
+                    }
+                </div>
+            `;
+
+            item.onclick = () => {
+
+                if(agentDevice){
+
+                    showCollectorDevice(
+                        agentDevice
+                    );
+
+                } else {
+
+                    showDiscoveredDevice(
+                        device
+                    );
+                }
+            };
+
+            targets.appendChild(item);
+        });
+
+        scanLog(
+            `Found ${discovered.length} device(s).`
+        );
+
+    }
+    catch(error){
+
+        scanLog(
+            `Scan failed: ${error}`
+        );
+    }
+    finally {
+
+        button.disabled = false;
+        button.textContent = 'SCAN';
+    }
+}
+
+    
+
+        function showCollectorDevice(host) {
+
+    document.getElementById('selectedTitle').textContent =
+        host.hostname;
+
+    document.getElementById('selectedDescription').textContent =
+        `IP: ${host.ip}`;
+
+    document.getElementById('cpuValue').textContent =
+        `${host.cpu ?? 0}%`;
+
+    document.getElementById('ramValue').textContent =
+        `${host.memory ?? 0}%`;
+
+    document.getElementById('usbCount').textContent =
+    host.usb_ports_connected ?? 0;
+
+    setGauge(cpuGauge, host.cpu ?? 0, 100);
+    setGauge(ramGauge, host.memory ?? 0, 100);
+    setGauge(
+    usbGauge,
+    Math.min(
+        host.usb_ports_connected ?? 0,
+        10
+    ),
+    10
+);
+
+    fetch('/api/collector/logs')
+        .then(r => r.json())
+        .then(data => {
+
+            const system = data.systems.find(
+                s => s.hostname === host.hostname
+            );
+
+            if (!system) return;
+
+            const cpuHistory =
+                system.logs.map(log => log.cpu ?? 0);
+
+            const ramHistory =
+                system.logs.map(log => log.memory ?? 0);
+
+            cpuChart.data.labels =
+                system.logs.map(log => log.timestamp);
+
+            ramChart.data.labels =
+                system.logs.map(log => log.timestamp);
+
+            cpuChart.data.datasets[0].data =
+                cpuHistory;
+
+            ramChart.data.datasets[0].data =
+                ramHistory;
+
+            cpuChart.update();
+            ramChart.update();
+
+            renderLogs(system.logs || []);
+
+            renderProcesses(
+                system.latest?.top_processes || []
+            );
+        });
+
+    renderDevices([
+        `Hostname: ${host.hostname}`,
+        `IP Address: ${host.ip}`,
+        `CPU Usage: ${host.cpu}%`,
+        `RAM Usage: ${host.memory}%`,
+        `Process Count: ${host.process_count}`,
+        `USB Connections: ${host.usb_ports_connected ?? 0}`
+        `Status: Online`
+    ]);
+
+    document.getElementById('macAddress').textContent =
+        'MAC: Available through collector logs';
+
+    renderPorts([]);
+
+    scanLog(
+        `Loaded ${host.hostname} (${host.ip})`
+    );
+}
+    
+        function showDiscoveredDevice(device){
+
+    document.getElementById(
+        'selectedTitle'
+    ).textContent =
+        device.name || device.ip;
+
+    document.getElementById(
+        'selectedDescription'
+    ).textContent =
+        `IP: ${device.ip}`;
+
+    document.getElementById(
+        'cpuValue'
+    ).textContent =
+        'N/A';
+
+    document.getElementById(
+        'ramValue'
+    ).textContent =
+        'N/A';
+
+    document.getElementById(
+        'usbCount'
+    ).textContent =
+        'N/A';
+
+    setGauge(cpuGauge,0,100);
+    setGauge(ramGauge,0,100);
+    setGauge(usbGauge,0,10);
+
+    renderDevices([
+        `Hostname: ${device.name || 'Unknown'}`,
+        `IP Address: ${device.ip}`,
+        `Agent: Not Installed`
+    ]);
+
+    renderProcesses([]);
+    renderLogs([]);
+
+    scanLog(
+        `Loaded discovered device ${device.ip}`
+    );
+}
+        function selectTarget(target, element) {
+            selectedIp = target.ip;
+            selectedIsSnmp = Boolean(target.snmp);
+            document.querySelectorAll('.target').forEach(item => item.classList.remove('active'));
+            element.classList.add('active');
+            document.getElementById('pollButton').disabled = !selectedIsSnmp;
+            document.getElementById('selectedTitle').textContent = `${target.name} / ${target.ip}`;
+            document.getElementById('selectedDescription').textContent = `${target.description} | ${selectedIsSnmp ? 'SNMP enabled' : 'Discovered without SNMP'} | MAC: ${target.mac}`;
+            document.getElementById('macAddress').textContent = `MAC: ${target.mac}`;
+            renderPorts(target.open_ports || []);
+            renderLogs([]);
+            renderProcesses([]);
+            remoteHistory.cpu = Array(10).fill(0);
+            remoteHistory.ram = Array(10).fill(0);
+            resetMetrics();
+            if (selectedIsSnmp) {
+                pollSelected();
+            } else {
+                loadExistingLogs(target.ip);
+                scanLog(`Selected ${target.ip}: discovered by ARP/open-port scan; no SNMP agent responded.`);
+            }
+        }
+
+        async function pollSelected() {
+            if (!selectedIp || !selectedIsSnmp) return;
+
+            const community = document.getElementById('community').value.trim() || 'public';
+            const response = await fetch(`/api/snmp/metrics?ip=${encodeURIComponent(selectedIp)}&community=${encodeURIComponent(community)}`);
+            const data = await response.json();
+            const cpu = Number.isFinite(data.cpu) ? data.cpu : null;
+            const ram = data.ram && Number.isFinite(data.ram.percent) ? data.ram.percent : null;
+            const usb = Array.isArray(data.usb) ? data.usb : [];
+            const usbCount = usb.filter(device => !device.startsWith('No USB')).length;
+
+            document.getElementById('selectedTitle').textContent = `${data.name} / ${data.ip}`;
+            document.getElementById('selectedDescription').textContent = `${data.description} | RAM: ${data.ram?.description || 'Not exposed'}`;
+            document.getElementById('macAddress').textContent = `MAC: ${data.mac}`;
+            document.getElementById('cpuValue').textContent = cpu === null ? 'N/A' : `${cpu}%`;
+            document.getElementById('ramValue').textContent = ram === null ? 'N/A' : `${ram}%`;
+            document.getElementById('usbCount').textContent = usbCount;
+
+            setGauge(cpuGauge, cpu, 100);
+            setGauge(ramGauge, ram, 100);
+            setGauge(usbGauge, usbCount, 10);
+
+            remoteHistory.cpu.push(cpu || 0);
+            remoteHistory.ram.push(ram || 0);
+            remoteHistory.cpu = remoteHistory.cpu.slice(-10);
+            remoteHistory.ram = remoteHistory.ram.slice(-10);
+            cpuChart.data.datasets[0].data = remoteHistory.cpu;
+            ramChart.data.datasets[0].data = remoteHistory.ram;
+            cpuChart.update();
+            ramChart.update();
+
+            renderDevices(usb);
+            renderPorts(data.open_ports || []);
+            renderLogs(data.logs || []);
+            renderProcesses(data.processes || []);
+            scanLog(`Polled ${data.ip}: CPU ${cpu ?? 'N/A'}%, RAM ${ram ?? 'N/A'}%, USB ${usbCount}.`);
+        }
+
+        async function loadExistingLogs(ip) {
+            const response = await fetch(`/api/snmp/logs?ip=${encodeURIComponent(ip)}&limit=25`);
+            const data = await response.json();
+            renderLogs(data.logs || []);
+        }
+
+        function resetMetrics() {
+            document.getElementById('cpuValue').textContent = 'N/A';
+            document.getElementById('ramValue').textContent = 'N/A';
+            document.getElementById('usbCount').textContent = '0';
+            setGauge(cpuGauge, 0, 100);
+            setGauge(ramGauge, 0, 100);
+            setGauge(usbGauge, 0, 10);
+            cpuChart.data.datasets[0].data = Array(10).fill(0);
+            ramChart.data.datasets[0].data = Array(10).fill(0);
+            cpuChart.update();
+            ramChart.update();
+            renderDevices([]);
+        }
+
+        function renderPorts(openPorts) {
+            const container = document.getElementById('ports');
+            container.innerHTML = '';
+            if (!openPorts.length) {
+                const row = document.createElement('div');
+                row.className = 'device';
+                row.textContent = 'No common TCP ports detected by this scan.';
+                container.appendChild(row);
+                return;
+            }
+
+            openPorts.forEach(port => {
+                const row = document.createElement('div');
+                row.className = 'port';
+                row.innerHTML = `<strong>${port.port}</strong><span>${port.service} - ${port.risk}</span>`;
+                container.appendChild(row);
+            });
+        }
+
+        function renderLogs(logs) {
+
+    const container =
+        document.getElementById('deviceLogs');
+
+    container.innerHTML = '';
+
+    if (!logs.length) {
+
+        container.innerHTML =
+            '<div class="device">No logs available.</div>';
+
+        return;
+    }
+
+    logs.forEach(log => {
+
+        const row =
+            document.createElement('article');
+
+        row.className = 'log-row';
+
+        row.innerHTML = `
+            <strong>${escapeHtml(log.timestamp || '')}</strong>
+            <div class="log-meta">
+                <span>CPU ${log.cpu ?? 0}%</span>
+                <span>RAM ${log.memory ?? 0}%</span>
+            </div>
+        `;
+
+        container.appendChild(row);
+    });
+}
+            
+        function renderProcesses(processes) {
+            const container = document.getElementById('processes');
+            container.innerHTML = '';
+            if (!processes.length) {
+                const row = document.createElement('div');
+                row.className = 'device';
+                row.textContent = 'No process table exposed by this SNMP agent.';
+                container.appendChild(row);
+                return;
+            }
+
+            processes.slice(0, 30).forEach(process => {
+                const row = document.createElement('article');
+                row.className = 'process-row';
+                row.innerHTML = `
+                    <strong>${escapeHtml(process.name || 'Unknown')}</strong>
+                    <div class="process-meta">
+                        <span>PID ${escapeHtml(process.pid ?? 'N/A')}</span>
+                        <span>${escapeHtml(process.status || 'unknown')}</span>
+                        <span>${escapeHtml(process.type || 'unknown')}</span>
+                        <span>${process.memory_mb ?? 0} MB</span>
+                    </div>
+                    <div class="muted">${escapeHtml(process.path || '')}</div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        async function refreshNetworkDevices() {
+
+    try {
+
+        const response =
+            await fetch('/api/collector/logs');
+
+        const data =
+            await response.json();
+        
+        const countElement =
+    document.getElementById('deviceCount');
+
+if (countElement) {
+    countElement.textContent =
+        data.hosts.length;
+}
+
+
+        const targets =
+            document.getElementById('targets');
+
+        targets.innerHTML = '';
+
+        data.hosts.forEach(host => {
+
+            const item =
+                document.createElement('button');
+
+            item.className = 'target';
+
+            item.innerHTML = `
+                <strong>${escapeHtml(host.hostname)}</strong>
+                <div class="muted">${host.ip}</div>
+                <div class="muted">
+                    CPU ${host.cpu ?? 0}% |
+                    RAM ${host.memory ?? 0}%
+                </div>
+            `;
+
+            item.onclick =
+                () => showCollectorDevice(host);
+
+            targets.appendChild(item);
+        });
+
+    } catch(err) {
+
+        console.error(err);
+
+    }
+}
+
+        setInterval(() => {
+            if (selectedIp && selectedIsSnmp) pollSelected();
+        }, 7000);
+
+        refreshNetworkDevices();
+
+//         setInterval(
+//     refreshNetworkDevices,
+//     5000
+// );
+    </script>
+</body>
+</html>

@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Metrics | Cyber Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0b0d12;
+            --panel: #141821;
+            --panel-2: #0f131b;
+            --border: #2b3444;
+            --text: #edf2f8;
+            --muted: #9aa7b8;
+            --cyan: #32d5ff;
+            --green: #42f59b;
+            --orange: #ff9f43;
+            --red: #ff5c7a;
+            --blue: #7aa7ff;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, Segoe UI, system-ui, -apple-system, sans-serif;
+        }
+
+        .shell {
+            width: min(1260px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 28px 0;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 18px;
+            margin-bottom: 22px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(1.3rem, 3vw, 2rem);
+            letter-spacing: 0;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            margin: 6px 0 0;
+            font-size: 0.92rem;
+        }
+
+        nav {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            padding: 9px 12px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        nav a.active {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: #102134;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.8fr);
+            gap: 18px;
+        }
+
+        .panel {
+            background: linear-gradient(180deg, #161b25 0%, var(--panel) 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 18px;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+        }
+
+        .panel h2 {
+            margin: 0 0 14px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .metric {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            min-height: 138px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .metric canvas { max-height: 88px; }
+
+        .metric strong {
+            display: block;
+            font-size: 1.45rem;
+            margin-top: -28px;
+        }
+
+        .metric span, label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0;
+        }
+
+        .chart-box, .device-list, .terminal {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+
+        .device {
+            border-left: 3px solid var(--red);
+            padding: 8px 10px;
+            background: #121827;
+            margin-top: 8px;
+            overflow-wrap: anywhere;
+        }
+
+        .terminal {
+            min-height: 118px;
+            max-height: 170px;
+            overflow: auto;
+            color: var(--green);
+            white-space: pre-wrap;
+            font-size: 0.85rem;
+            font-family: Consolas, "Courier New", monospace;
+        }
+
+        .collector-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin: 18px 0 0;
+        }
+
+        .stat {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .stat span {
+            color: var(--muted);
+            display: block;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+        }
+
+        .stat strong {
+            color: var(--text);
+            display: block;
+            font-size: 1.35rem;
+            margin-top: 6px;
+            overflow-wrap: anywhere;
+        }
+
+        .log-list {
+            display: grid;
+            gap: 10px;
+            margin-top: 12px;
+            max-height: 430px;
+            overflow: auto;
+        }
+
+        .log-row {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--blue);
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .log-main {
+            align-items: center;
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+        }
+
+        .log-host {
+            font-weight: 800;
+            overflow-wrap: anywhere;
+        }
+
+        .systems-grid {
+            display: grid;
+            gap: 14px;
+            margin-top: 12px;
+        }
+
+        .system-card {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .system-card .log-list {
+            max-height: 320px;
+        }
+
+        .system-head {
+            align-items: flex-start;
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+        }
+
+        .system-name {
+            color: var(--text);
+            font-size: 1.05rem;
+            font-weight: 800;
+            overflow-wrap: anywhere;
+        }
+
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .resource {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .resource span {
+            color: var(--muted);
+            display: block;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+        }
+
+        .resource strong {
+            display: block;
+            font-size: 1rem;
+            margin-top: 4px;
+            overflow-wrap: anywhere;
+        }
+
+        .pill {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            color: var(--muted);
+            display: inline-flex;
+            font-size: 0.78rem;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
+
+        .log-metrics {
+            color: var(--muted);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 8px;
+            font-size: 0.86rem;
+        }
+
+        .process-list {
+            border-top: 1px solid var(--border);
+            display: grid;
+            gap: 6px;
+            margin-top: 10px;
+            padding-top: 10px;
+        }
+
+        .process-row {
+            display: grid;
+            grid-template-columns: 70px minmax(0, 1fr) 80px;
+            gap: 8px;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .process-row span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .empty-state {
+            color: var(--muted);
+            padding: 16px;
+            text-align: center;
+        }
+
+        .identity {
+            display: grid;
+            gap: 12px;
+        }
+
+        .identity-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+
+        .identity-row strong {
+            color: var(--cyan);
+            text-align: right;
+            overflow-wrap: anywhere;
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 0.84rem;
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 860px) {
+            header, .identity-row, .log-main { align-items: flex-start; flex-direction: column; }
+            .grid, .metrics, .collector-grid, .resource-grid { grid-template-columns: 1fr; }
+            .system-head { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <header>
+            <div>
+                <h1>Cyber Monitor Dashboard</h1>
+                <p class="subtitle">Local telemetry plus collector logs from remote agents.</p>
+            </div>
+            <nav aria-label="Primary navigation">
+                <a class="active" href="/">This Device</a>
+                <a href="/network">SNMP Network Devices</a>
+                <a href="/security">Security View</a>
+            </nav>
+        </header>
+
+        <section class="grid">
+            <div class="panel">
+                <h2>CPU, RAM, and USB Telemetry</h2>
+                <div class="metrics">
+                    <div class="metric">
+                        <canvas id="cpuGauge"></canvas>
+                        <strong id="cpuValue">0%</strong>
+                        <span>CPU Usage</span>
+                    </div>
+                    <div class="metric">
+                        <canvas id="ramGauge"></canvas>
+                        <strong id="ramValue">0%</strong>
+                        <span>RAM Usage</span>
+                    </div>
+                    <div class="metric">
+                        <canvas id="usbGauge"></canvas>
+                        <strong id="usbCount">0</strong>
+                        <span>USB Port Connections</span>
+                    </div>
+                </div>
+
+                <div class="chart-box"><canvas id="cpuChart" height="95"></canvas></div>
+                <div class="chart-box"><canvas id="ramChart" height="95"></canvas></div>
+
+                <section class="collector-grid" aria-label="Collector summary">
+                    <div class="stat">
+                        <span>Collector</span>
+                        <strong id="collectorState">Starting</strong>
+                    </div>
+                    <div class="stat">
+                        <span>Port</span>
+                        <strong id="collectorPort">5000</strong>
+                    </div>
+                    <div class="stat">
+                        <span>Entries</span>
+                        <strong id="collectorEntries">0</strong>
+                    </div>
+                    <div class="stat">
+                        <span>Hosts</span>
+                        <strong id="collectorHosts">0</strong>
+                    </div>
+                </section>
+
+                <div class="device-list">
+                    <label>Collector Log Path</label>
+                    <div class="muted" id="collectorPath">Waiting for collector...</div>
+                </div>
+
+                <div class="device-list">
+                    <label>Client Systems</label>
+                    <div class="systems-grid" id="collectorSystems">
+                        <div class="empty-state">Waiting for logs in mnt/master/log.json.</div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="panel">
+                <h2>Current Host</h2>
+                <div class="identity">
+                    <div class="identity-row">
+                        <label>Hostname</label>
+                        <strong id="hostname">Loading</strong>
+                    </div>
+                    <div class="identity-row">
+                        <label>Primary IP</label>
+                        <strong id="hostIp">Loading</strong>
+                    </div>
+                </div>
+
+                <div class="device-list">
+                    <label>Connected USB Ports</label>
+                    <div id="devices"><div class="device">Checking local USB connections...</div></div>
+                </div>
+            </aside>
+        </section>
+    </main>
+
+    <script>
+        const gaugeOptions = (color, max) => ({
+            type: 'doughnut',
+            data: { datasets: [{ data: [0, max], backgroundColor: [color, '#202838'], borderWidth: 0 }] },
+            options: { rotation: -90, circumference: 180, cutout: '78%', plugins: { tooltip: { enabled: false } } }
+        });
+
+        const lineOptions = (color) => ({
+            type: 'line',
+            data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: color, backgroundColor: color + '22', fill: true, tension: 0.35 }] },
+            options: { plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { suggestedMin: 0, suggestedMax: 100, ticks: { color: '#6f8198' }, grid: { color: '#202838' } } } }
+        });
+
+        const cpuGauge = new Chart(document.getElementById('cpuGauge'), gaugeOptions('#32d5ff', 100));
+        const ramGauge = new Chart(document.getElementById('ramGauge'), gaugeOptions('#42f59b', 100));
+        const usbGauge = new Chart(document.getElementById('usbGauge'), gaugeOptions('#ff9f43', 10));
+        const cpuChart = new Chart(document.getElementById('cpuChart'), lineOptions('#32d5ff'));
+        const ramChart = new Chart(document.getElementById('ramChart'), lineOptions('#42f59b'));
+
+        function setGauge(chart, value, max) {
+            chart.data.datasets[0].data = [value, Math.max(0, max - value)];
+            chart.update();
+        }
+
+        function log(message) {
+            const logs = document.getElementById('logs');
+            if (!logs) return;
+            logs.textContent += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function renderDevices(devices) {
+            const container = document.getElementById('devices');
+            container.innerHTML = '';
+            devices.forEach(device => {
+                const row = document.createElement('div');
+                row.className = 'device';
+                row.textContent = device;
+                container.appendChild(row);
+            });
+        }
+
+        async function refreshLocal() {
+            const response = await fetch('/api/local');
+            const data = await response.json();
+            const usbCount = data.usb.filter(device => !device.startsWith('No USB')).length;
+
+            document.getElementById('hostname').textContent = data.hostname;
+            document.getElementById('hostIp').textContent = data.ip;
+            document.getElementById('cpuValue').textContent = `${data.cpu}%`;
+            document.getElementById('ramValue').textContent = `${data.ram}%`;
+            document.getElementById('usbCount').textContent = usbCount;
+
+            setGauge(cpuGauge, data.cpu, 100);
+            setGauge(ramGauge, data.ram, 100);
+            setGauge(usbGauge, usbCount, 10);
+
+            cpuChart.data.datasets[0].data = data.cpu_hist;
+            ramChart.data.datasets[0].data = data.ram_hist;
+            cpuChart.update();
+            ramChart.update();
+
+            renderDevices(data.usb);
+            log(`Local refresh: CPU ${data.cpu}%, RAM ${data.ram}%, USB ${usbCount}.`);
+        }
+
+        async function refreshCollectorStatus() {
+            const response = await fetch('/api/collector/status');
+            const data = await response.json();
+
+            document.getElementById('collectorState').textContent = data.running ? 'Running' : 'Stopped';
+            document.getElementById('collectorPort').textContent = data.port;
+            document.getElementById('collectorPath').textContent = data.master_log;
+        }
+
+        async function refreshCollectorLogs() {
+            const response = await fetch('/api/collector/logs?limit=20');
+            const data = await response.json();
+            const systemsContainer = document.getElementById('collectorSystems');
+
+            document.getElementById('collectorEntries').textContent = data.count;
+            document.getElementById('collectorHosts').textContent = data.hosts.length;
+            document.getElementById('collectorPath').textContent = data.host_log_dir || data.path;
+
+            systemsContainer.innerHTML = '';
+            if (!data.systems.length) {
+                const empty = document.createElement('div');
+                empty.className = 'empty-state';
+                empty.textContent = 'No collector logs yet. Start an agent and send metrics to this machine on port 5000.';
+                systemsContainer.appendChild(empty);
+                return;
+            }
+
+            data.systems.forEach(system => {
+                const card = document.createElement('article');
+                card.className = 'system-card';
+                card.innerHTML = renderSystemCard(system);
+                systemsContainer.appendChild(card);
+            });
+        }
+
+        function renderSystemCard(system) {
+            const latest = system.latest || {};
+            return `
+                <div class="system-head">
+                    <div>
+                        <div class="system-name">${escapeHtml(system.hostname)}</div>
+                        <div class="muted">${escapeHtml(system.ip)} | last received ${escapeHtml(latest.received || 'Unknown')}</div>
+                        <div class="muted">${escapeHtml(system.source_path || latest.source_path || '')}</div>
+                    </div>
+                    <span class="pill">${system.count} log${system.count === 1 ? '' : 's'}</span>
+                </div>
+                <div class="resource-grid">
+                    <div class="resource">
+                        <span>CPU</span>
+                        <strong>${latest.cpu ?? 'N/A'}%</strong>
+                    </div>
+                    <div class="resource">
+                        <span>RAM</span>
+                        <strong>${latest.memory ?? 'N/A'}%</strong>
+                    </div>
+                    <div class="resource">
+                        <span>Used RAM</span>
+                        <strong>${latest.used_gb ?? 'N/A'} GB</strong>
+                    </div>
+                    <div class="resource">
+                        <span>Processes</span>
+                        <strong>${latest.process_count ?? 'N/A'}</strong>
+                    </div>
+                </div>
+                <div class="log-list">
+                    ${system.logs.map(renderLogRow).join('')}
+                </div>
+            `;
+        }
+
+        function renderLogRow(entry) {
+            return `
+                <article class="log-row">
+                    <div class="log-main">
+                        <div>
+                            <div class="log-host">${escapeHtml(entry.received)}</div>
+                            <div class="muted">${escapeHtml(entry.timestamp)} | ${escapeHtml(entry.ip)}</div>
+                        </div>
+                        <span class="pill">${escapeHtml(entry.hostname)}</span>
+                    </div>
+                    <div class="log-metrics">
+                        <span>CPU ${entry.cpu ?? 'N/A'}%</span>
+                        <span>RAM ${entry.memory ?? 'N/A'}%</span>
+                        <span>Used ${entry.used_gb ?? 'N/A'} GB</span>
+                        <span>Processes ${entry.process_count ?? 'N/A'}</span>
+                    </div>
+                    ${renderTopProcesses(entry.top_processes)}
+                </article>
+            `;
+        }
+
+        function renderTopProcesses(processes) {
+            if (!processes || !processes.length) return '';
+
+            const rows = processes.map(process => `
+                <div class="process-row">
+                    <span>PID ${escapeHtml(process.pid ?? 'N/A')}</span>
+                    <span title="${escapeHtml(process.name || 'Unknown')}">${escapeHtml(process.name || 'Unknown')}</span>
+                    <span>RAM ${process.memory_percent ?? 0}%</span>
+                </div>
+            `).join('');
+
+            return `<div class="process-list">${rows}</div>`;
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        refreshLocal();
+        refreshCollectorStatus();
+        refreshCollectorLogs();
+        setInterval(refreshLocal, 5000);
+        setInterval(refreshCollectorLogs, 3000);
+        setInterval(refreshCollectorStatus, 10000);
+    </script>
+</body>
+</html>
