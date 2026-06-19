@@ -1,861 +1,864 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live OS and Memory Services | Cyber Monitor</title>
-    <style>
-        :root {
-            color-scheme: dark;
-            --bg: #090b10;
-            --panel: #111620;
-            --panel-2: #0d1118;
-            --row: #121827;
-            --border: #263244;
-            --text: #e6edf7;
-            --muted: #8b9bb2;
-            --cyan: #32d5ff;
-            --green: #42f59b;
-            --orange: #ff9f43;
-            --red: #ff5c7a;
-            --heat-1: #211b1b;
-            --heat-2: #3a241f;
-            --heat-3: #5a2a22;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live OS and Memory Services | Cyber Monitor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b10;
+      --panel: #111620;
+      --panel-2: #0d1118;
+      --row: #121827;
+      --border: #263244;
+      --text: #e6edf7;
+      --muted: #8b9bb2;
+      --cyan: #32d5ff;
+      --green: #42f59b;
+      --orange: #ff9f43;
+      --red: #ff5c7a;
+      --heat-1: #211b1b;
+      --heat-2: #3a241f;
+      --heat-3: #5a2a22;
+    }
 
-        * { box-sizing: border-box; }
+    * { box-sizing: border-box; }
 
-        body {
-            margin: 0;
-            min-height: 100vh;
-            background: var(--bg);
-            color: var(--text);
-            font-family: Consolas, "Courier New", monospace;
-        }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Consolas, "Courier New", monospace;
+    }
 
-        .shell {
-            width: min(1180px, calc(100% - 32px));
-            margin: 0 auto;
-            padding: 28px 0;
-        }
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0;
+    }
 
-        header {
-            display: flex;
-            justify-content: space-between;
-            gap: 16px;
-            align-items: center;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 18px;
-            margin-bottom: 22px;
-        }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+      margin-bottom: 22px;
+    }
 
-        h1 {
-            margin: 0;
-            font-size: clamp(1.3rem, 3vw, 2rem);
-            font-weight: 700;
-            letter-spacing: 0;
-        }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.3rem, 3vw, 2rem);
+      font-weight: 700;
+    }
 
-        nav {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
 
-        nav a, .tab, button {
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: #121a27;
-            color: var(--text);
-            cursor: pointer;
-            font: inherit;
-            min-height: 42px;
-            padding: 9px 12px;
-            text-decoration: none;
-            font-size: 0.85rem;
-        }
+    nav a, .tab, button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #121a27;
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      min-height: 42px;
+      padding: 9px 12px;
+      text-decoration: none;
+      font-size: 0.85rem;
+    }
 
-        nav a.active, .tab.active, button.primary {
-            border-color: var(--cyan);
-            color: var(--cyan);
-            background: #102134;
-            font-weight: 700;
-        }
+    nav a.active, .tab.active, button.primary {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: #102134;
+      font-weight: 700;
+    }
 
-        button:hover, nav a:hover, .tab:hover {
-            border-color: var(--cyan);
-        }
+    button:hover, nav a:hover, .tab:hover {
+      border-color: var(--cyan);
+    }
 
-        button:disabled {
-            color: var(--muted);
-            cursor: wait;
-        }
+    button:disabled {
+      color: var(--muted);
+      cursor: wait;
+    }
 
-        .tabs {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 18px;
-        }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
 
-        .tab-panel { display: none; }
-        .tab-panel.active { display: block; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
 
-        .summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 10px;
-            margin-bottom: 12px;
-        }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
 
-        .summary-item {
-            background: var(--panel-2);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 12px;
-            min-height: 74px;
-        }
+    .summary-item {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      min-height: 74px;
+    }
 
-        .summary-item span {
-            color: var(--muted);
-            display: block;
-            font-size: 0.78rem;
-        }
+    .summary-item span {
+      color: var(--muted);
+      display: block;
+      font-size: 0.78rem;
+    }
 
-        .summary-item strong {
-            color: var(--cyan);
-            display: block;
-            font-size: 1.45rem;
-            font-weight: 700;
-            margin-top: 8px;
-        }
+    .summary-item strong {
+      color: var(--cyan);
+      display: block;
+      font-size: 1.45rem;
+      font-weight: 700;
+      margin-top: 8px;
+    }
 
-        .panel {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 18px;
-            overflow: hidden;
-        }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 18px;
+      overflow: hidden;
+    }
 
-        .memory-services {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 10px;
-            padding: 14px 16px;
-        }
+    .memory-services {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+      padding: 14px 16px;
+    }
 
-        .memory-service {
-            background: var(--panel-2);
-            border: 1px solid var(--border);
-            border-left: 3px solid var(--orange);
-            border-radius: 6px;
-            min-height: 92px;
-            padding: 12px;
-        }
+    .memory-service {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--orange);
+      border-radius: 6px;
+      min-height: 92px;
+      padding: 12px;
+    }
 
-        .memory-service strong {
-            color: var(--cyan);
-            display: block;
-            font-size: 1.15rem;
-            margin-bottom: 6px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
+    .memory-service strong {
+      color: var(--cyan);
+      display: block;
+      font-size: 1.15rem;
+      margin-bottom: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-        .memory-service .memory-value {
-            color: var(--green);
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-top: 8px;
-        }
+    .memory-service .memory-value {
+      color: var(--green);
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-top: 8px;
+    }
 
-        .panel-head {
-            align-items: center;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 14px 16px;
-        }
+    .memory-service.clickable {
+      cursor: pointer;
+    }
 
-        .panel-head h2 {
-            margin: 0;
-            color: var(--muted);
-            font-size: 0.9rem;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
+    .memory-service.clickable:hover {
+      border-color: var(--cyan);
+    }
 
-        .muted {
-            color: var(--muted);
-            font-size: 0.86rem;
-        }
+    .panel-head {
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+    }
 
-        .controls {
-            display: grid;
-            grid-template-columns: minmax(160px, 1fr) 130px 110px;
-            gap: 8px;
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border);
-        }
+    .panel-head h2 {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
 
-        input, select {
-            width: 100%;
-            min-height: 42px;
-            background: #121a27;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text);
-            font: inherit;
-            padding: 8px 10px;
-        }
+    .muted {
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
 
-        .target-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 8px;
-            padding: 12px 16px;
-        }
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(160px, 1fr) 130px 110px;
+      gap: 8px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
 
-        .target {
-            text-align: left;
-            min-height: 74px;
-        }
+    .scan-controls {
+      grid-template-columns: minmax(220px, 1fr) 130px 110px;
+    }
 
-        .target.active {
-            border-color: var(--green);
-            color: var(--green);
-            background: #10251d;
-        }
+    .target-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 8px;
+      padding: 12px 16px;
+    }
 
-        .task-table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
-            font-size: 0.9rem;
-        }
+    .target {
+      text-align: left;
+      min-height: 74px;
+    }
 
-        .task-table th, .task-table td {
-            border-right: 1px solid var(--border);
-            border-bottom: 1px solid #1c2533;
-            padding: 9px 10px;
-            vertical-align: middle;
-        }
+    .target.active {
+      border-color: var(--green);
+      color: var(--green);
+      background: #10251d;
+    }
 
-        .task-table th {
-            background: var(--panel-2);
-            border-bottom: 1px solid var(--border);
-            color: var(--muted);
-            font-weight: 400;
-            text-align: left;
-        }
+    input, select {
+      width: 100%;
+      min-height: 42px;
+      background: #121a27;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font: inherit;
+      padding: 8px 10px;
+    }
 
-        .task-table th.metric-head {
-            color: var(--text);
-            font-size: 1.15rem;
-            text-align: right;
-        }
+    .task-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 0.9rem;
+    }
 
-        .task-table th.metric-head span {
-            color: var(--muted);
-            display: block;
-            font-size: 0.82rem;
-            margin-top: 2px;
-        }
+    .task-table th, .task-table td {
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid #1c2533;
+      padding: 9px 10px;
+      vertical-align: middle;
+    }
 
-        .task-table td.metric {
-            background: var(--heat-1);
-            text-align: right;
-            color: var(--text);
-        }
+    .task-table th {
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-weight: 400;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
 
-        .task-table td.metric.medium { background: var(--heat-2); }
-        .task-table td.metric.hot { background: var(--heat-3); }
+    .task-table th.metric-head {
+      color: var(--text);
+      font-size: 1.15rem;
+      text-align: right;
+    }
 
-        .group-row td {
-            background: #0b1018;
-            border-top: 1px solid var(--border);
-            color: var(--cyan);
-            font-size: 1.05rem;
-            font-weight: 500;
-            padding-top: 16px;
-        }
+    .task-table th.metric-head span {
+      color: var(--muted);
+      display: block;
+      font-size: 0.82rem;
+      margin-top: 2px;
+    }
 
-        .name-cell {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
+    .task-table td.metric {
+      background: var(--heat-1);
+      text-align: right;
+      color: var(--text);
+    }
 
-        .name-cell .icon {
-            display: inline-block;
-            margin-right: 8px;
-            text-align: center;
-            width: 20px;
-        }
+    .task-table td.metric.medium { background: var(--heat-2); }
+    .task-table td.metric.hot { background: var(--heat-3); }
 
-        .status-ok { color: var(--green); }
-        .status-bad { color: var(--red); }
+    .group-row td {
+      background: #0b1018;
+      border-top: 1px solid var(--border);
+      color: var(--cyan);
+      font-size: 1.05rem;
+      font-weight: 500;
+      padding-top: 16px;
+    }
 
-        .clickable-row {
-            cursor: pointer;
-        }
+    .name-cell {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-        .clickable-row:hover td {
-            background: #151d2b;
-        }
+    .name-cell .icon {
+      display: inline-block;
+      margin-right: 8px;
+      text-align: center;
+      width: 20px;
+    }
 
-        .detail-row td {
-            background: #0b1018;
-            color: var(--text);
-            padding: 12px 16px;
-            white-space: normal;
-        }
+    .status-ok { color: var(--green); }
+    .status-bad { color: var(--red); }
 
-        .app-details {
-            display: grid;
-            gap: 8px;
-            margin-top: 8px;
-        }
+    .clickable-row {
+      cursor: pointer;
+    }
 
-        .app-detail {
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 10px;
-        }
+    .clickable-row:hover td {
+      background: #151d2b;
+    }
 
-        .app-detail strong {
-            color: var(--cyan);
-        }
+    .detail-row td {
+      background: #0b1018;
+      color: var(--text);
+      padding: 12px 16px;
+      white-space: normal;
+    }
 
-        .memory-service.clickable {
-            cursor: pointer;
-        }
+    .app-details {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
 
-        .memory-service.clickable:hover {
-            border-color: var(--cyan);
-        }
+    .app-detail {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      overflow-wrap: anywhere;
+    }
 
-        .table-wrap {
-            max-height: 520px;
-            overflow: auto;
-            background: var(--panel-2);
-        }
+    .app-detail strong {
+      color: var(--cyan);
+    }
 
-        .table-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
-        .table-wrap::-webkit-scrollbar-thumb { background: #2c384c; border-radius: 8px; }
-        .table-wrap::-webkit-scrollbar-track { background: var(--panel-2); }
+    .table-wrap {
+      max-height: 520px;
+      overflow: auto;
+      background: var(--panel-2);
+    }
 
-        @media (max-width: 860px) {
-            header, .panel-head {
-                align-items: flex-start;
-                flex-direction: column;
-            }
+    .table-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
+    .table-wrap::-webkit-scrollbar-thumb { background: #2c384c; border-radius: 8px; }
+    .table-wrap::-webkit-scrollbar-track { background: var(--panel-2); }
 
-            .summary, .controls {
-                grid-template-columns: 1fr;
-            }
+    @media (max-width: 860px) {
+      header, .panel-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
 
-            .task-table {
-                min-width: 760px;
-            }
-        }
-    </style>
+      .summary, .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .task-table {
+        min-width: 760px;
+      }
+    }
+  </style>
 </head>
 <body>
-    <main class="shell">
-        <header>
-            <h1>Live OS and Memory Services</h1>
-            <nav aria-label="Primary navigation">
-                <a href="/">This Device</a>
-                <a href="/network">SNMP Network Devices</a>
-                <a class="active" href="/security">Security View</a>
-            </nav>
-        </header>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>Live OS and Memory Services</h1>
+        <div class="muted">Processes and services are separated, with service memory ranked live.</div>
+      </div>
+      <nav aria-label="Primary navigation">
+        <a href="/">This Device</a>
+        <a href="/network">Network Devices</a>
+        <a href="/logs">Windows Logs</a>
+        <a class="active" href="/security">Security View</a>
+      </nav>
+    </header>
 
-        <div class="tabs" role="tablist" aria-label="Live monitoring tabs">
-            <button class="tab active" id="localTab" onclick="showTab('local')">This Device</button>
-            <button class="tab" id="snmpTab" onclick="showTab('snmp')">SNMP Network Devices</button>
+    <div class="tabs" role="tablist" aria-label="Live monitoring tabs">
+      <button class="tab active" id="localTab" onclick="showTab('local')">This Device</button>
+      <button class="tab" id="networkTab" onclick="showTab('network')">SNMP Network Devices</button>
+    </div>
+
+    <section class="tab-panel active" id="localPanel">
+      <div class="summary" id="localSummary"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Service Memory</h2>
+            <div class="muted">Running OS services sorted by live RAM usage.</div>
+          </div>
+          <div class="muted" id="serviceMemoryMeta">Waiting for service memory...</div>
         </div>
+        <div class="memory-services" id="serviceMemoryRows"></div>
+      </div>
 
-        <section class="tab-panel active" id="localPanel">
-            <div class="summary" id="localSummary"></div>
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Processes</h2>
+            <div class="muted" id="localMeta">Waiting for live data...</div>
+          </div>
+          <div class="muted">Auto-refresh: 15 seconds</div>
+        </div>
+        <div class="table-wrap">
+          <table class="task-table" aria-label="Local processes">
+            <thead id="localProcessHead"></thead>
+            <tbody id="localProcesses"></tbody>
+          </table>
+        </div>
+      </div>
 
-            <div class="panel">
-                <div class="panel-head">
-                    <div>
-                        <h2>Service Memory</h2>
-                        <div class="muted">Running OS services sorted by live RAM usage.</div>
-                    </div>
-                    <div class="muted" id="serviceMemoryMeta">Waiting for service memory...</div>
-                </div>
-                <div class="memory-services" id="serviceMemoryRows"></div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-head">
-                    <div>
-                        <h2>Processes</h2>
-                        <div class="muted" id="localMeta">Waiting for live data...</div>
-                    </div>
-                    <div class="muted">Auto-refresh: 3 seconds</div>
-                </div>
-                <div class="table-wrap">
-                    <table class="task-table" aria-label="Local processes">
-                        <thead id="localProcessHead"></thead>
-                        <tbody id="localProcesses"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-head">
-                    <h2>OS Services</h2>
-                    <div class="muted" id="localServiceMeta"></div>
-                </div>
-                <div class="controls">
-                    <input id="localServiceSearch" placeholder="Filter services" oninput="renderLocalServices()">
-                    <select id="localServiceFilter" onchange="renderLocalServices()">
-                        <option value="all">All services</option>
-                        <option value="running">Running</option>
-                        <option value="stopped">Stopped</option>
-                        <option value="security">Security</option>
-                        <option value="remote">Remote</option>
-                        <option value="network">Network</option>
-                    </select>
-                    <button onclick="refreshLocal()">Refresh</button>
-                </div>
-                <div class="table-wrap">
-                    <table class="task-table" aria-label="Local OS services">
-                        <thead>
-                            <tr>
-                                <th style="width: 34%;">Name</th>
-                                <th>Status</th>
-                                <th>Category</th>
-                                <th>Memory</th>
-                                <th>Memory %</th>
-                                <th>Start type</th>
-                                <th>PID</th>
-                            </tr>
-                        </thead>
-                        <tbody id="localServices"></tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <section class="tab-panel" id="snmpPanel">
-            <div class="panel">
-                <div class="panel-head">
-                    <div>
-                        <h2>Scan Same Network for SNMP Devices</h2>
-                        <div class="muted" id="scanMeta">Default range is based on this device IP.</div>
-                    </div>
-                </div>
-                <div class="controls">
-                    <input id="cidr" value="{{ default_cidr }}" aria-label="Network range">
-                    <input id="community" value="public" aria-label="SNMP community">
-                    <button class="primary" id="scanButton" onclick="scanNetwork()">Scan</button>
-                </div>
-                <div class="target-list" id="targets"></div>
-            </div>
-
-            <div class="summary" id="snmpSummary"></div>
-
-            <div class="panel">
-                <div class="panel-head">
-                    <div>
-                        <h2 id="snmpTitle">Processes</h2>
-                        <div class="muted" id="snmpMeta">Scan and select an SNMP-enabled device.</div>
-                    </div>
-                    <button id="pollButton" onclick="pollSelected()" disabled>Refresh</button>
-                </div>
-                <div class="table-wrap">
-                    <table class="task-table" aria-label="SNMP device processes">
-                        <thead id="snmpProcessHead"></thead>
-                        <tbody id="snmpProcesses"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-head">
-                    <h2>SNMP-Reported Services and Ports</h2>
-                    <div class="muted">SNMP devices usually expose processes; open ports are shown as network services.</div>
-                </div>
-                <div class="table-wrap">
-                    <table class="task-table" aria-label="SNMP services">
-                        <thead>
-                            <tr>
-                                <th style="width: 42%;">Name</th>
-                                <th>Status</th>
-                                <th>Port</th>
-                                <th>Risk</th>
-                                <th>Source</th>
-                            </tr>
-                        </thead>
-                        <tbody id="snmpServices"></tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <script>
-        let localServices = [];
-        let localProcesses = [];
-        let openProcessKey = '';
-        let openServiceKey = '';
-        let openMemoryServiceKey = '';
-        let localRefreshInFlight = false;
-        const applicationDetailsByPid = {};
-        let selectedIp = '';
-        let selectedTarget = null;
-        let activeTab = 'local';
-
-        function escapeHtml(value) {
-            return String(value ?? '').replace(/[&<>"']/g, char => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;'
-            }[char]));
-        }
-
-        function showTab(name) {
-            activeTab = name;
-            document.getElementById('localPanel').classList.toggle('active', name === 'local');
-            document.getElementById('snmpPanel').classList.toggle('active', name === 'snmp');
-            document.getElementById('localTab').classList.toggle('active', name === 'local');
-            document.getElementById('snmpTab').classList.toggle('active', name === 'snmp');
-        }
-
-        function summaryItems(containerId, items) {
-            document.getElementById(containerId).innerHTML = items.map(([label, value]) => (
-                `<div class="summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
-            )).join('');
-        }
-
-        function processHead(cpu, memory, disk, network) {
-            return `<tr>
-                <th style="width: 36%;">Name</th>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>OS Services</h2>
+          <div class="muted" id="localServiceMeta"></div>
+        </div>
+        <div class="controls">
+          <input id="localServiceSearch" placeholder="Filter services" oninput="renderLocalServices()">
+          <select id="localServiceFilter" onchange="renderLocalServices()">
+            <option value="all">All services</option>
+            <option value="running">Running</option>
+            <option value="stopped">Stopped</option>
+            <option value="security">Security</option>
+            <option value="remote">Remote</option>
+            <option value="network">Network</option>
+          </select>
+          <button class="primary" onclick="refreshLocal()">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="task-table" aria-label="Local OS services">
+            <thead>
+              <tr>
+                <th style="width: 34%;">Name</th>
                 <th>Status</th>
-                <th class="metric-head">${escapeHtml(cpu)}<span>CPU</span></th>
-                <th class="metric-head">${escapeHtml(memory)}<span>Memory</span></th>
-                <th class="metric-head">${escapeHtml(disk)}<span>Disk</span></th>
-                <th class="metric-head">${escapeHtml(network)}<span>Network</span></th>
-            </tr>`;
-        }
+                <th>Category</th>
+                <th>Memory</th>
+                <th>Memory %</th>
+                <th>Start type</th>
+                <th>PID</th>
+              </tr>
+            </thead>
+            <tbody id="localServices"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
-        function heatClass(value, medium, hot) {
-            const numeric = Number(value) || 0;
-            if (numeric >= hot) return 'hot';
-            if (numeric >= medium) return 'medium';
-            return '';
-        }
+    <section class="tab-panel" id="networkPanel">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Scan Same Network for SNMP Devices</h2>
+            <div class="muted" id="scanMeta">Default range is based on this device IP.</div>
+          </div>
+        </div>
+        <div class="controls scan-controls">
+          <input id="cidr" value="{{ default_cidr }}" aria-label="Network range">
+          <input id="community" value="public" aria-label="Community">
+          <button class="primary" id="scanButton" onclick="scanNetwork()">Scan</button>
+        </div>
+        <div class="target-list" id="targets"></div>
+      </div>
 
-        function pidKey(prefix, item) {
-            return `${prefix}:${item.pid || ''}:${item.name || item.display_name || ''}`;
-        }
+      <div class="summary" id="networkSummary"></div>
 
-        function togglePidDetails(kind, key, pid) {
-            if (kind === 'process') {
-                openProcessKey = openProcessKey === key ? '' : key;
-                if (openProcessKey && pid) loadApplicationDetails(pid);
-                renderLocalProcesses();
-                return;
-            }
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="networkTitle">Processes</h2>
+            <div class="muted" id="networkMeta">Scan and select a network device.</div>
+          </div>
+          <button id="pollButton" onclick="pollSelected()" disabled>Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="task-table" aria-label="Network device processes">
+            <thead id="networkProcessHead"></thead>
+            <tbody id="networkProcesses"></tbody>
+          </table>
+        </div>
+      </div>
 
-            if (kind === 'service') {
-                openServiceKey = openServiceKey === key ? '' : key;
-                if (openServiceKey && pid) loadApplicationDetails(pid);
-                renderLocalServices();
-                return;
-            }
+      <div class="panel">
+        <div class="panel-head">
+          <h2>SNMP-Reported Services and Ports</h2>
+          <div class="muted">Discovered devices expose open ports as network services.</div>
+        </div>
+        <div class="table-wrap">
+          <table class="task-table" aria-label="Network services">
+            <thead>
+              <tr>
+                <th style="width: 42%;">Name</th>
+                <th>Status</th>
+                <th>Port</th>
+                <th>Risk</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="networkServices"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
 
-            openMemoryServiceKey = openMemoryServiceKey === key ? '' : key;
-            if (openMemoryServiceKey && pid) loadApplicationDetails(pid);
-            renderServiceMemoryPanel();
-        }
+  <script>
+    let localServices = [];
+    let localProcesses = [];
+    let openProcessKey = "";
+    let openServiceKey = "";
+    let openMemoryServiceKey = "";
+    let localRefreshInFlight = false;
+    const applicationDetailsByPid = {};
+    let selectedTarget = null;
+    let activeTab = "local";
 
-        async function loadApplicationDetails(pid) {
-            if (!pid || applicationDetailsByPid[pid]?.loaded || applicationDetailsByPid[pid]?.loading) return;
-            applicationDetailsByPid[pid] = { applications: [], loading: true, loaded: false };
-            refreshOpenDetails();
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
 
-            try {
-                const response = await fetch(`/api/os/process-applications?pid=${encodeURIComponent(pid)}`);
-                const data = await response.json();
-                applicationDetailsByPid[pid] = {
-                    applications: data.applications || [],
-                    loading: false,
-                    loaded: true,
-                };
-            } catch (error) {
-                applicationDetailsByPid[pid] = { applications: [], loading: false, loaded: true };
-            }
-            refreshOpenDetails();
-        }
+    function summaryItems(containerId, items) {
+      document.getElementById(containerId).innerHTML = items.map(([label, value]) => (
+        `<div class="summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
+      )).join("");
+    }
 
-        function refreshOpenDetails() {
-            if (openProcessKey) renderLocalProcesses();
-            if (openServiceKey) renderLocalServices();
-            if (openMemoryServiceKey) renderServiceMemoryPanel();
-        }
+    function showTab(name) {
+      activeTab = name;
+      document.getElementById("localPanel").classList.toggle("active", name === "local");
+      document.getElementById("networkPanel").classList.toggle("active", name === "network");
+      document.getElementById("localTab").classList.toggle("active", name === "local");
+      document.getElementById("networkTab").classList.toggle("active", name === "network");
+    }
 
-        function applicationDetailsHtml(pid) {
-            if (!pid) {
-                return '<div class="muted">No live PID is attached, so application details are unavailable.</div>';
-            }
+    function processHead(cpu, memory, disk, network) {
+      return `<tr>
+        <th style="width: 36%;">Name</th>
+        <th>Status</th>
+        <th class="metric-head">${escapeHtml(cpu)}<span>CPU</span></th>
+        <th class="metric-head">${escapeHtml(memory)}<span>Memory</span></th>
+        <th class="metric-head">${escapeHtml(disk)}<span>Disk</span></th>
+        <th class="metric-head">${escapeHtml(network)}<span>Network</span></th>
+      </tr>`;
+    }
 
-            const detail = applicationDetailsByPid[pid];
-            if (!detail || detail.loading) {
-                return '<div class="muted">Reading application details...</div>';
-            }
+    function heatClass(value, medium, hot) {
+      const numeric = Number(value) || 0;
+      if (numeric >= hot) return "hot";
+      if (numeric >= medium) return "medium";
+      return "";
+    }
 
-            const applications = detail.applications || [];
-            if (!applications.length) {
-                return '<div class="muted">No linked application details were available for this PID.</div>';
-            }
+    function pidKey(prefix, item) {
+      return `${prefix}:${item.pid || ""}:${item.name || item.display_name || ""}`;
+    }
 
-            return `<div class="app-details">${applications.map(app => `
-                <div class="app-detail">
-                    <strong>${escapeHtml(app.name)}</strong>
-                    <div class="muted">${escapeHtml(app.relation)} | PID ${escapeHtml(app.pid || '')} | ${escapeHtml(app.status || '')}</div>
-                    <div>${escapeHtml(app.path || 'Application path unavailable')}</div>
-                    ${app.command ? `<div class="muted">${escapeHtml(app.command)}</div>` : ''}
-                    ${app.user ? `<div class="muted">User ${escapeHtml(app.user)}</div>` : ''}
-                </div>
-            `).join('')}</div>`;
-        }
+    function togglePidDetails(kind, key, pid) {
+      if (kind === "process") {
+        openProcessKey = openProcessKey === key ? "" : key;
+        if (openProcessKey && pid) loadApplicationDetails(pid);
+        renderLocalProcesses();
+        return;
+      }
 
-        function processRow(process, remote = false) {
-            const cpu = remote ? null : Number(process.cpu_percent || 0);
-            const memory = Number(process.rss_mb ?? process.memory_mb ?? 0);
-            const disk = Number(process.disk_mbps || 0);
-            const network = Number(process.network_mbps || 0);
-            const status = process.status || 'unknown';
-            const cpuText = remote ? `${escapeHtml(process.cpu_ticks ?? 0)} ticks` : `${cpu.toFixed(1)}%`;
-            const nameHint = process.pid ? `PID ${process.pid}` : process.type || '';
-            const key = pidKey(remote ? 'remote-process' : 'process', process);
-            const rowAttrs = remote
-                ? ''
-                : ` class="clickable-row" data-process-key="${escapeHtml(key)}" data-pid="${escapeHtml(process.pid || '')}" onclick="togglePidDetails('process', this.dataset.processKey, this.dataset.pid)" title="Click to show application details"`;
-            return `<tr${rowAttrs}>
-                <td class="name-cell"><span class="icon">${remote ? '&#9638;' : '&#8250;'}</span>${escapeHtml(process.name)}<div class="muted">${escapeHtml(nameHint)}</div></td>
-                <td class="${String(status).toLowerCase() === 'running' ? 'status-ok' : ''}">${escapeHtml(status)}</td>
-                <td class="metric ${heatClass(cpu, 1, 5)}">${cpuText}</td>
-                <td class="metric ${heatClass(memory, 100, 300)}">${memory.toFixed(1)} MB</td>
-                <td class="metric ${heatClass(disk, 0.2, 1)}">${disk.toFixed(1)} MB/s</td>
-                <td class="metric ${heatClass(network, 0.1, 1)}">${network.toFixed(1)} Mbps</td>
-            </tr>` +
-                (!remote && openProcessKey === key ? `<tr class="detail-row"><td colspan="6">
-                    <strong>${escapeHtml(process.name)}</strong>
-                    <div class="muted">Applications and child processes used by this process</div>
-                    ${applicationDetailsHtml(process.pid)}
-                </td></tr>` : '');
-        }
+      if (kind === "service") {
+        openServiceKey = openServiceKey === key ? "" : key;
+        if (openServiceKey && pid) loadApplicationDetails(pid);
+        renderLocalServices();
+        return;
+      }
 
-        function groupedProcessRows(processes) {
-            const apps = processes.filter(process => process.kind === 'app');
-            const background = processes.filter(process => process.kind !== 'app');
-            return [
-                `<tr class="group-row"><td colspan="6">Apps (${apps.length})</td></tr>`,
-                ...apps.map(process => processRow(process)),
-                `<tr class="group-row"><td colspan="6">Background processes (${background.length})</td></tr>`,
-                ...background.map(process => processRow(process))
-            ].join('');
-        }
+      openMemoryServiceKey = openMemoryServiceKey === key ? "" : key;
+      if (openMemoryServiceKey && pid) loadApplicationDetails(pid);
+      renderServiceMemoryPanel();
+    }
 
-        function renderLocalProcesses() {
-            document.getElementById('localProcesses').innerHTML = groupedProcessRows(localProcesses);
-        }
+    async function loadApplicationDetails(pid) {
+      if (!pid || applicationDetailsByPid[pid]?.loaded || applicationDetailsByPid[pid]?.loading) return;
+      applicationDetailsByPid[pid] = { applications: [], loading: true, loaded: false };
+      refreshOpenDetails();
 
-        function renderLocalServices() {
-            const query = document.getElementById('localServiceSearch').value.trim().toLowerCase();
-            const filter = document.getElementById('localServiceFilter').value;
-            const rows = localServices.filter(service => {
-                const status = String(service.status || '').toLowerCase();
-                const category = String(service.category || '').toLowerCase();
-                const haystack = `${service.name} ${service.display_name} ${service.start_type} ${category}`.toLowerCase();
-                return (!query || haystack.includes(query)) &&
-                    (filter === 'all' ||
-                    (filter === 'running' && status === 'running') ||
-                    (filter === 'stopped' && status !== 'running') ||
-                    category === filter);
-            });
+      try {
+        const response = await fetch(`/api/os/process-applications?pid=${encodeURIComponent(pid)}`);
+        const data = await response.json();
+        applicationDetailsByPid[pid] = {
+          applications: data.applications || [],
+          loading: false,
+          loaded: true,
+        };
+      } catch (error) {
+        applicationDetailsByPid[pid] = { applications: [], loading: false, loaded: true };
+      }
+      refreshOpenDetails();
+    }
 
-            document.getElementById('localServices').innerHTML = rows.map(service => {
-                const status = String(service.status || '').toLowerCase();
-                const memoryMb = Number(service.memory_mb || 0);
-                const memoryPercent = Number(service.memory_percent || 0);
-                const key = pidKey('service', service);
-                return `<tr class="clickable-row" data-service-key="${escapeHtml(key)}" data-pid="${escapeHtml(service.pid || '')}" onclick="togglePidDetails('service', this.dataset.serviceKey, this.dataset.pid)" title="Click to show application details">
-                    <td class="name-cell">${escapeHtml(service.display_name || service.name)}<div class="muted">${escapeHtml(service.name)}${service.process_name ? ` | ${escapeHtml(service.process_name)}` : ''}</div></td>
-                    <td class="${status === 'running' ? 'status-ok' : 'status-bad'}">${escapeHtml(service.status)}</td>
-                    <td>${escapeHtml(service.category)}</td>
-                    <td class="metric ${heatClass(memoryMb, 100, 300)}">${memoryMb.toFixed(1)} MB</td>
-                    <td class="metric ${heatClass(memoryPercent, 1, 5)}">${memoryPercent.toFixed(2)}%</td>
-                    <td>${escapeHtml(service.start_type)}</td>
-                    <td>${escapeHtml(service.pid || '')}</td>
-                </tr>${openServiceKey === key ? `<tr class="detail-row"><td colspan="7">
-                    <strong>${escapeHtml(service.display_name || service.name)}</strong>
-                    <div class="muted">Applications and child processes used by this OS service</div>
-                    ${applicationDetailsHtml(service.pid)}
-                </td></tr>` : ''}`;
-            }).join('');
-        }
+    function refreshOpenDetails() {
+      if (openProcessKey) renderLocalProcesses();
+      if (openServiceKey) renderLocalServices();
+      if (openMemoryServiceKey) renderServiceMemoryPanel();
+    }
 
-        function renderServiceMemoryPanel() {
-            const rows = localServices
-                .filter(service => Number(service.memory_mb || 0) > 0)
-                .sort((left, right) => Number(right.memory_mb || 0) - Number(left.memory_mb || 0))
-                .slice(0, 8);
+    function applicationDetailsHtml(pid) {
+      if (!pid) {
+        return '<div class="muted">No live PID is attached, so application details are unavailable.</div>';
+      }
 
-            document.getElementById('serviceMemoryMeta').textContent = rows.length
-                ? `Top ${rows.length} services by memory`
-                : 'No running service memory found yet';
+      const detail = applicationDetailsByPid[pid];
+      if (!detail || detail.loading) {
+        return '<div class="muted">Reading application details...</div>';
+      }
 
-            document.getElementById('serviceMemoryRows').innerHTML = rows.length
-                ? rows.map(service => {
-                    const key = pidKey('memory-service', service);
-                    return `<div class="memory-service clickable" data-memory-service-key="${escapeHtml(key)}" data-pid="${escapeHtml(service.pid || '')}" onclick="togglePidDetails('memory-service', this.dataset.memoryServiceKey, this.dataset.pid)" title="Click to show application details">
-                    <strong>${escapeHtml(service.display_name || service.name)}</strong>
-                    <div class="muted">${escapeHtml(service.name)} | PID ${escapeHtml(service.pid || '')} | ${escapeHtml(service.process_name || '')}</div>
-                    <div class="memory-value">${Number(service.memory_mb || 0).toFixed(1)} MB</div>
-                    <div class="muted">${Number(service.memory_percent || 0).toFixed(2)}% of RAM</div>
-                    ${openMemoryServiceKey === key ? `<div class="muted">Applications and child processes used by this memory service</div>${applicationDetailsHtml(service.pid)}` : ''}
-                </div>`;
-                }).join('')
-                : '<div class="muted">No service memory rows are available. Services without a PID cannot report memory.</div>';
-        }
+      const applications = detail.applications || [];
+      if (!applications.length) {
+        return '<div class="muted">No linked application details were available for this PID.</div>';
+      }
 
-        async function refreshLocal() {
-            if (localRefreshInFlight) return;
-            localRefreshInFlight = true;
-            let data;
-            try {
-                const response = await fetch('/api/security/local');
-                data = await response.json();
-            } catch (error) {
-                document.getElementById('localMeta').textContent = `Refresh failed: ${error}`;
-                return;
-            } finally {
-                localRefreshInFlight = false;
-            }
-            localServices = data.services || [];
-            localProcesses = data.memory.processes || data.memory.top_processes || [];
-            const diskTotal = localProcesses.reduce((sum, item) => sum + Number(item.disk_mbps || 0), 0);
-            const networkTotal = localProcesses.reduce((sum, item) => sum + Number(item.network_mbps || 0), 0);
+      return `<div class="app-details">${applications.map(app => `
+        <div class="app-detail">
+          <strong>${escapeHtml(app.name)}</strong>
+          <div class="muted">${escapeHtml(app.relation)} | PID ${escapeHtml(app.pid || "")} | ${escapeHtml(app.status || "")}</div>
+          <div>${escapeHtml(app.path || "Application path unavailable")}</div>
+          ${app.command ? `<div class="muted">${escapeHtml(app.command)}</div>` : ""}
+          ${app.user ? `<div class="muted">User ${escapeHtml(app.user)}</div>` : ""}
+        </div>
+      `).join("")}</div>`;
+    }
 
-            summaryItems('localSummary', [
-                ['CPU', `${data.memory.process_count} proc`],
-                ['Memory', `${data.memory.percent}%`],
-                ['Used RAM', `${data.memory.used_gb} GB`],
-                ['Service RAM', `${data.service_summary.memory_mb} MB`],
-                ['Running services', data.service_summary.running],
-                ['Stopped services', data.service_summary.stopped],
-            ]);
+    function processRow(process) {
+      const cpu = Number(process.cpu_percent || 0);
+      const memory = Number(process.rss_mb ?? process.memory_mb ?? 0);
+      const disk = Number(process.disk_mbps || 0);
+      const network = Number(process.network_mbps || 0);
+      const status = process.status || "unknown";
+      const key = pidKey("process", process);
+      return `<tr class="clickable-row" data-process-key="${escapeHtml(key)}" data-pid="${escapeHtml(process.pid || "")}" onclick="togglePidDetails('process', this.dataset.processKey, this.dataset.pid)" title="Click to show application details">
+        <td class="name-cell"><span class="icon">&#8250;</span>${escapeHtml(process.name)}<div class="muted">PID ${escapeHtml(process.pid || "")}</div></td>
+        <td class="${String(status).toLowerCase() === "running" ? "status-ok" : ""}">${escapeHtml(status)}</td>
+        <td class="metric ${heatClass(cpu, 1, 5)}">${cpu.toFixed(1)}%</td>
+        <td class="metric ${heatClass(memory, 100, 300)}">${memory.toFixed(1)} MB</td>
+        <td class="metric ${heatClass(disk, 0.2, 1)}">${disk.toFixed(1)} MB/s</td>
+        <td class="metric ${heatClass(network, 0.1, 1)}">${network.toFixed(1)} Mbps</td>
+      </tr>` +
+      (openProcessKey === key ? `<tr class="detail-row"><td colspan="6">
+        <strong>${escapeHtml(process.name)}</strong>
+        <div class="muted">Applications and child processes used by this process</div>
+        ${applicationDetailsHtml(process.pid)}
+      </td></tr>` : "");
+    }
 
-            document.getElementById('localMeta').textContent =
-                `${data.os.hostname} | ${data.os.system} ${data.os.release} | Last refresh ${data.timestamp}`;
-            document.getElementById('localServiceMeta').textContent =
-                `${data.service_summary.total} services | ${data.service_summary.review} need review`;
-            document.getElementById('localProcessHead').innerHTML =
-                processHead(`${data.memory.process_count}`, `${data.memory.percent}%`, `${diskTotal.toFixed(0)} MB/s`, `${networkTotal.toFixed(0)} Mbps`);
-            renderLocalProcesses();
-            renderServiceMemoryPanel();
-            renderLocalServices();
-        }
+    function groupedProcessRows(processes) {
+      const apps = processes.filter(process => process.kind === "app");
+      const background = processes.filter(process => process.kind !== "app");
+      return [
+        `<tr class="group-row"><td colspan="6">Apps (${apps.length})</td></tr>`,
+        ...apps.map(process => processRow(process)),
+        `<tr class="group-row"><td colspan="6">Background processes (${background.length})</td></tr>`,
+        ...background.map(process => processRow(process))
+      ].join("");
+    }
 
-        async function scanNetwork() {
-            const button = document.getElementById('scanButton');
-            const cidr = document.getElementById('cidr').value.trim();
-            const community = document.getElementById('community').value.trim() || 'public';
-            button.disabled = true;
-            button.textContent = 'Scanning';
-            document.getElementById('scanMeta').textContent = `Scanning ${cidr} for SNMP-enabled devices...`;
+    function renderLocalProcesses() {
+      document.getElementById("localProcesses").innerHTML = groupedProcessRows(localProcesses);
+    }
 
-            try {
-                const response = await fetch(`/api/snmp/scan?cidr=${encodeURIComponent(cidr)}&community=${encodeURIComponent(community)}`);
-                const data = await response.json();
-                document.getElementById('scanMeta').textContent = `Found ${data.targets.length} SNMP-enabled device(s) in ${data.cidr}.`;
-                document.getElementById('targets').innerHTML = data.targets.map(target => (
-                    `<button class="target" onclick="selectTarget('${escapeHtml(target.ip)}', this)">
-                        <strong>${escapeHtml(target.ip)}</strong>
-                        <div class="muted">${escapeHtml(target.name)}</div>
-                        <div class="muted">MAC ${escapeHtml(target.mac || 'Unknown')}</div>
-                    </button>`
-                )).join('');
-            } catch (error) {
-                document.getElementById('scanMeta').textContent = `Scan failed: ${error}`;
-            } finally {
-                button.disabled = false;
-                button.textContent = 'Scan';
-            }
-        }
+    function renderLocalServices() {
+      const query = document.getElementById("localServiceSearch").value.trim().toLowerCase();
+      const filter = document.getElementById("localServiceFilter").value;
+      const rows = localServices.filter(service => {
+        const status = String(service.status || "").toLowerCase();
+        const category = String(service.category || "").toLowerCase();
+        const haystack = `${service.name} ${service.display_name} ${service.start_type} ${service.process_name} ${category}`.toLowerCase();
+        return (!query || haystack.includes(query)) &&
+          (filter === "all" ||
+          (filter === "running" && status === "running") ||
+          (filter === "stopped" && status !== "running") ||
+          category === filter);
+      });
 
-        function selectTarget(ip, element) {
-            selectedIp = ip;
-            selectedTarget = element;
-            document.querySelectorAll('.target').forEach(item => item.classList.remove('active'));
-            element.classList.add('active');
-            document.getElementById('pollButton').disabled = false;
-            pollSelected();
-        }
+      document.getElementById("localServices").innerHTML = rows.map(service => {
+        const status = String(service.status || "").toLowerCase();
+        const memoryMb = Number(service.memory_mb || 0);
+        const memoryPercent = Number(service.memory_percent || 0);
+        const key = pidKey("service", service);
+        return `<tr class="clickable-row" data-service-key="${escapeHtml(key)}" data-pid="${escapeHtml(service.pid || "")}" onclick="togglePidDetails('service', this.dataset.serviceKey, this.dataset.pid)" title="Click to show application details">
+          <td class="name-cell">${escapeHtml(service.display_name || service.name)}<div class="muted">${escapeHtml(service.name)}${service.process_name ? ` | ${escapeHtml(service.process_name)}` : ""}</div></td>
+          <td class="${status === "running" ? "status-ok" : "status-bad"}">${escapeHtml(service.status)}</td>
+          <td>${escapeHtml(service.category)}</td>
+          <td class="metric ${heatClass(memoryMb, 100, 300)}">${memoryMb.toFixed(1)} MB</td>
+          <td class="metric ${heatClass(memoryPercent, 1, 5)}">${memoryPercent.toFixed(2)}%</td>
+          <td>${escapeHtml(service.start_type)}</td>
+          <td>${escapeHtml(service.pid || "")}</td>
+        </tr>${openServiceKey === key ? `<tr class="detail-row"><td colspan="7">
+          <strong>${escapeHtml(service.display_name || service.name)}</strong>
+          <div class="muted">Applications and child processes used by this OS service</div>
+          ${applicationDetailsHtml(service.pid)}
+        </td></tr>` : ""}`;
+      }).join("");
+    }
 
-        async function pollSelected() {
-            if (!selectedIp) return;
+    function renderServiceMemoryPanel() {
+      const rows = localServices
+        .filter(service => Number(service.memory_mb || 0) > 0)
+        .sort((left, right) => Number(right.memory_mb || 0) - Number(left.memory_mb || 0))
+        .slice(0, 8);
 
-            const community = document.getElementById('community').value.trim() || 'public';
-            const response = await fetch(`/api/snmp/metrics?ip=${encodeURIComponent(selectedIp)}&community=${encodeURIComponent(community)}`);
-            const data = await response.json();
-            const processes = data.processes || [];
-            const cpu = Number.isFinite(data.cpu) ? `${data.cpu}%` : 'N/A';
-            const ram = Number.isFinite(data.ram?.percent) ? `${data.ram.percent}%` : 'N/A';
+      document.getElementById("serviceMemoryMeta").textContent = rows.length
+        ? `Top ${rows.length} services by memory`
+        : "No running service memory found yet";
 
-            summaryItems('snmpSummary', [
-                ['CPU', cpu],
-                ['Memory', ram],
-                ['Used RAM', data.ram?.used_mb ? `${data.ram.used_mb} MB` : 'N/A'],
-                ['Processes', processes.length],
-                ['Open ports', (data.open_ports || []).length]
-            ]);
+      document.getElementById("serviceMemoryRows").innerHTML = rows.length
+        ? rows.map(service => {
+          const key = pidKey("memory-service", service);
+          return `<div class="memory-service clickable" data-memory-service-key="${escapeHtml(key)}" data-pid="${escapeHtml(service.pid || "")}" onclick="togglePidDetails('memory-service', this.dataset.memoryServiceKey, this.dataset.pid)" title="Click to show application details">
+            <strong>${escapeHtml(service.display_name || service.name)}</strong>
+            <div class="muted">${escapeHtml(service.name)} | PID ${escapeHtml(service.pid || "")} | ${escapeHtml(service.process_name || "")}</div>
+            <div class="memory-value">${Number(service.memory_mb || 0).toFixed(1)} MB</div>
+            <div class="muted">${Number(service.memory_percent || 0).toFixed(2)}% of RAM</div>
+            ${openMemoryServiceKey === key ? `<div class="muted">Applications and child processes used by this memory service</div>${applicationDetailsHtml(service.pid)}` : ""}
+          </div>`;
+        }).join("")
+        : '<div class="muted">No service memory rows are available. Services without a PID cannot report memory.</div>';
+    }
 
-            document.getElementById('snmpTitle').textContent = `${data.name} / ${data.ip}`;
-            document.getElementById('snmpMeta').textContent =
-                `${data.description} | MAC ${data.mac} | ${data.ram?.description || 'RAM details unavailable'}`;
-            document.getElementById('snmpProcessHead').innerHTML = processHead(cpu, ram, 'N/A', 'N/A');
-            document.getElementById('snmpProcesses').innerHTML = processes.length
-                ? processes.map(process => processRow(process, true)).join('')
-                : `<tr><td colspan="6" class="muted">This SNMP agent did not expose live process rows through HOST-RESOURCES-MIB.</td></tr>`;
+    async function refreshLocal() {
+      if (localRefreshInFlight) return;
+      localRefreshInFlight = true;
+      let data;
+      try {
+        const response = await fetch("/api/security/local");
+        data = await response.json();
+      } catch (error) {
+        document.getElementById("localMeta").textContent = `Refresh failed: ${error}`;
+        return;
+      } finally {
+        localRefreshInFlight = false;
+      }
 
-            const services = (data.open_ports || []).map(port => ({
-                name: port.service,
-                status: 'open',
-                port: port.port,
-                risk: port.risk,
-                source: 'TCP scan'
-            }));
-            document.getElementById('snmpServices').innerHTML = services.length
-                ? services.map(service => `<tr>
-                    <td>${escapeHtml(service.name)}</td>
-                    <td class="status-ok">${escapeHtml(service.status)}</td>
-                    <td>${escapeHtml(service.port)}</td>
-                    <td>${escapeHtml(service.risk)}</td>
-                    <td>${escapeHtml(service.source)}</td>
-                </tr>`).join('')
-                : `<tr><td colspan="5" class="muted">No common open TCP services detected for this SNMP device.</td></tr>`;
-        }
+      localServices = data.services || [];
+      localProcesses = data.memory.processes || data.memory.top_processes || [];
+      const diskTotal = localProcesses.reduce((sum, item) => sum + Number(item.disk_mbps || 0), 0);
+      const networkTotal = localProcesses.reduce((sum, item) => sum + Number(item.network_mbps || 0), 0);
 
-        refreshLocal();
-        setInterval(refreshLocal, 3000);
-        setInterval(() => {
-            if (activeTab === 'snmp' && selectedIp) pollSelected();
-        }, 7000);
-    </script>
+      summaryItems("localSummary", [
+        ["CPU", `${data.memory.process_count} proc`],
+        ["Memory", `${data.memory.percent}%`],
+        ["Used RAM", `${data.memory.used_gb} GB`],
+        ["Service RAM", `${data.service_summary.memory_mb} MB`],
+        ["Running services", data.service_summary.running],
+        ["Stopped services", data.service_summary.stopped],
+      ]);
+
+      document.getElementById("localMeta").textContent =
+        `${data.os.hostname} | ${data.os.system} ${data.os.release} | Last refresh ${data.timestamp}`;
+      document.getElementById("localServiceMeta").textContent =
+        `${data.service_summary.total} services | ${data.service_summary.review} need review`;
+      document.getElementById("localProcessHead").innerHTML =
+        processHead(`${data.memory.process_count}`, `${data.memory.percent}%`, `${diskTotal.toFixed(0)} MB/s`, `${networkTotal.toFixed(0)} Mbps`);
+      renderLocalProcesses();
+      renderServiceMemoryPanel();
+      renderLocalServices();
+    }
+
+    function networkRisk(port) {
+      const high = [21, 23, 135, 139, 445, 3389, 5900];
+      const medium = [22, 80, 443, 8080, 8443];
+      const numericPort = Number(port);
+      if (high.includes(numericPort)) return "Review";
+      if (medium.includes(numericPort)) return "Informational";
+      return "Informational";
+    }
+
+    async function scanNetwork() {
+      const button = document.getElementById("scanButton");
+      const cidr = document.getElementById("cidr").value.trim();
+      button.disabled = true;
+      button.textContent = "Scanning";
+      document.getElementById("scanMeta").textContent = `Scanning ${cidr} for network devices...`;
+      selectedTarget = null;
+      document.getElementById("targets").innerHTML = "";
+      document.getElementById("networkSummary").innerHTML = "";
+      document.getElementById("networkServices").innerHTML = "";
+      document.getElementById("networkProcesses").innerHTML = "";
+      document.getElementById("pollButton").disabled = true;
+
+      try {
+        const response = await fetch(`/api/network/scan?cidr=${encodeURIComponent(cidr)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Scan failed");
+        const targets = data.targets || [];
+        document.getElementById("scanMeta").textContent = `Found ${targets.length} device(s) in ${data.cidr}.`;
+        document.getElementById("targets").innerHTML = targets.map((target, index) => (
+          `<button class="target" data-target-index="${index}" onclick="selectTarget(${index}, this)">
+            <strong>${escapeHtml(target.ip)}</strong>
+            <div class="muted">${escapeHtml(target.name || target.ip)}</div>
+            <div class="muted">MAC ${escapeHtml(target.mac || "Unknown")}</div>
+          </button>`
+        )).join("");
+        window.networkTargets = targets;
+      } catch (error) {
+        document.getElementById("scanMeta").textContent = `Scan failed: ${error.message || error}`;
+      } finally {
+        button.disabled = false;
+        button.textContent = "Scan";
+      }
+    }
+
+    function selectTarget(index, element) {
+      selectedTarget = (window.networkTargets || [])[index] || null;
+      document.querySelectorAll(".target").forEach(item => item.classList.remove("active"));
+      element.classList.add("active");
+      document.getElementById("pollButton").disabled = !selectedTarget;
+      pollSelected();
+    }
+
+    function pollSelected() {
+      if (!selectedTarget) return;
+      const ports = selectedTarget.open_ports || [];
+      summaryItems("networkSummary", [
+        ["CPU", "N/A"],
+        ["Memory", "N/A"],
+        ["Used RAM", "N/A"],
+        ["Processes", 0],
+        ["Open ports", ports.length],
+      ]);
+
+      document.getElementById("networkTitle").textContent = `${selectedTarget.ip} / ${selectedTarget.name || selectedTarget.ip}`;
+      document.getElementById("networkMeta").textContent =
+        `${selectedTarget.description || "Device discovered on the local network"} | MAC ${selectedTarget.mac || "Unknown"} | RAM not exposed by network scan`;
+      document.getElementById("networkProcessHead").innerHTML = processHead("N/A", "N/A", "N/A", "N/A");
+      document.getElementById("networkProcesses").innerHTML =
+        `<tr><td colspan="6" class="muted">This network scan does not expose live process rows. Use the local This Device tab for process and application details.</td></tr>`;
+      document.getElementById("networkServices").innerHTML = ports.length
+        ? ports.map(port => `<tr>
+          <td>${escapeHtml(port.service || "Unknown")}</td>
+          <td class="status-ok">open</td>
+          <td>${escapeHtml(port.port || "")}</td>
+          <td>${escapeHtml(networkRisk(port.port))}</td>
+          <td>TCP scan</td>
+        </tr>`).join("")
+        : `<tr><td colspan="5" class="muted">No common open TCP services detected for this device.</td></tr>`;
+    }
+
+    refreshLocal();
+    setInterval(refreshLocal, 15000);
+  </script>
 </body>
 </html>

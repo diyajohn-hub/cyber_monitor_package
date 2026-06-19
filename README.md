@@ -1,13 +1,13 @@
 # Cyber Monitor
 
-A small Flask dashboard for local system telemetry and SNMP-enabled network device metrics.
+A small Flask dashboard for local system telemetry, host system events, and network device discovery.
 
 ## Project layout
 
 ```text
 src/cyber_monitor/          Application package
 src/cyber_monitor/app.py    Flask app and telemetry endpoints
-src/cyber_monitor/snmp.py   Lightweight SNMP v2c client and metric readers
+src/cyber_monitor/network.py LAN discovery and common-port scanning
 src/cyber_monitor/templates Local and network dashboard templates
 run_monitor.bat             Windows launcher
 app.spec                    PyInstaller build specification
@@ -41,8 +41,9 @@ You can also run:
 ## Pages
 
 - `/` shows CPU usage, RAM usage, and USB/removable storage connections for this device.
-- `/network` scans a CIDR range for SNMP v2c devices and polls the selected device for CPU, RAM, and USB/removable-device details exposed by its SNMP agent.
-- `/security` shows two live Task Manager-style tabs: this device's processes/services and SNMP-enabled devices discovered on the same network.
+- `/network` scans a local IPv4 CIDR range and lists devices found through ping and ARP, with reverse-DNS names and common open TCP ports.
+- `/logs` shows recent events from the five standard Windows Event Viewer logs: Application, Security, Setup, System, and Forwarded Events.
+- `/security` shows live local processes, memory usage, and OS services.
 
 ## Local live APIs
 
@@ -50,10 +51,10 @@ You can also run:
 - `/api/memory/live` returns current RAM/swap usage, process count, and the highest-memory processes.
 - `/api/os/services` returns live OS service status, service categories, and running/stopped summary counts.
 - `/api/security/local` combines OS, memory, service, and alert data for the Security View.
-- `/api/snmp/metrics` includes SNMP HOST-RESOURCES process rows when the selected device exposes them.
+- `/api/network/scan` discovers reachable devices in a local IPv4 range.
+- `/api/system/logs` returns recent events grouped by the five standard Windows Event Viewer logs.
 
-The network page uses SNMP community `public` by default. The target device must have SNMP enabled and must expose HOST-RESOURCES-MIB data for CPU/RAM/USB details to appear.
-The network page also enriches discovered SNMP devices with ARP MAC-address data and a common TCP port check for security review.
+The network page warms the ARP cache with a parallel ping sweep, includes devices from the ARP table, and checks a small set of common TCP ports.
 
 ## Build executable
 

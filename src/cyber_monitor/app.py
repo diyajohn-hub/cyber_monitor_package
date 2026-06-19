@@ -15,14 +15,13 @@ import psutil
 from flask import Flask, jsonify, render_template, request
 
 from cyber_monitor import server as collector_server
-from cyber_monitor.snmp import default_cidr, discover_hosts, primary_ip, read_metrics
+from cyber_monitor.network import default_cidr, discover_devices, primary_ip
 
 CPU_HISTORY = deque([0] * 10, maxlen=10)
 LOCAL_RAM_HISTORY = deque([0] * 10, maxlen=10)
 SERVICE_STATUS_HISTORY = deque([0] * 10, maxlen=10)
 PROCESS_IO_HISTORY: dict[int, tuple[float, int]] = {}
 COLLECTOR_THREAD: threading.Thread | None = None
-SNMP_LOG_DIR = Path(__file__).resolve().parents[2] / "mnt" / "snmp"
 
 
 def template_dir() -> str:
@@ -45,6 +44,10 @@ def create_app() -> Flask:
     @app.get("/security")
     def security_dashboard():
         return render_template("security.html", default_cidr=default_cidr())
+
+    @app.get("/logs")
+    def system_logs_dashboard():
+        return render_template("logs.html")
 
     @app.get("/api/local")
     def local_metrics():
@@ -109,84 +112,81 @@ def create_app() -> Flask:
     def memory_live():
         return jsonify(live_memory_snapshot())
 
-    @app.get("/api/snmp/scan")
-    def scan_snmp():
+    @app.get("/api/network/scan")
+    def scan_network():
         cidr = request.args.get("cidr") or default_cidr()
-        community = request.args.get("community") or "public"
-        return jsonify({"cidr": cidr, "targets": discover_hosts(cidr, community)})
-
-    @app.get("/api/snmp/metrics")
-    def snmp_metrics():
-        ip_address = request.args.get("ip", "").strip()
-        community = request.args.get("community") or "public"
-        if not ip_address:
-            return jsonify({"error": "Missing ip parameter"}), 400
-        metrics = read_metrics(ip_address, community)
-        write_snmp_log(metrics)
-        return jsonify({**metrics, "logs": read_snmp_logs(ip_address, limit=25)})
-
-    @app.get("/api/snmp/logs")
-    def snmp_logs():
-        ip_address = request.args.get("ip", "").strip()
-        if not ip_address:
-            return jsonify({"error": "Missing ip parameter"}), 400
         try:
-            limit = int(request.args.get("limit") or 25)
-        except ValueError:
-            limit = 25
-        return jsonify({"ip": ip_address, "logs": read_snmp_logs(ip_address, max(1, min(limit, 200)))})
+            targets = discover_devices(cidr)
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        return jsonify({"cidr": cidr, "targets": targets})
+
+    @app.get("/api/system/logs")
+    def system_logs():
+        limit_arg = str(request.args.get("limit") or "1000").strip().lower()
+        if limit_arg == "all":
+            limit: int | None = None
+        else:
+            try:
+                limit = max(1, min(int(limit_arg), 5000))
+            except ValueError:
+                limit = 200
+        return jsonify({"hostname": socket.gethostname(), "logs": read_windows_logs(limit)})
 
     return app
 
 
-def write_snmp_log(metrics: dict[str, object]) -> None:
-    ip_address = str(metrics.get("ip") or "unknown")
-    SNMP_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    path = snmp_log_path(ip_address)
-    logs = load_log_file(path)
-    logs.append(
-        {
-            "received": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "metrics": metrics,
-        }
+def read_windows_logs(limit: int | None = None) -> list[dict[str, object]]:
+    channel_names = ["Application", "Security", "Setup", "System", "ForwardedEvents"]
+    if not sys.platform.startswith("win"):
+        return [{"name": name, "events": [], "error": "Windows Event Logs are only available on Windows"}
+                for name in channel_names]
+
+    names = ",".join(f"'{name}'" for name in channel_names)
+    event_command = "Get-WinEvent -LogName $name -ErrorAction Stop"
+    if limit is not None:
+        event_command = f"Get-WinEvent -LogName $name -MaxEvents {limit} -ErrorAction Stop"
+    timeout = 120 if limit is None else 30
+    script = (
+        f"@({names}) | ForEach-Object {{ $name = $_; try {{ "
+        f"$events = @({event_command} | "
+        "Select-Object TimeCreated,Id,LevelDisplayName,ProviderName,Message); "
+        "[PSCustomObject]@{Name=$name;Events=$events;Error=$null} "
+        "} catch { [PSCustomObject]@{Name=$name;Events=@();Error=$_.Exception.Message} } "
+        "} | ConvertTo-Json -Depth 5 -Compress"
     )
+    timed_out = False
     try:
-        path.write_text(json.dumps(logs[-500:], indent=2), encoding="utf-8")
-    except OSError:
-        return
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", script], capture_output=True,
+            check=False, text=True, timeout=timeout,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        payload = json.loads(result.stdout) if result.returncode == 0 and result.stdout.strip() else []
+    except subprocess.TimeoutExpired:
+        payload = []
+        timed_out = True
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        payload = []
 
-
-def read_snmp_logs(ip_address: str, limit: int = 25) -> list[dict[str, object]]:
-    logs = load_log_file(snmp_log_path(ip_address))
-    return [format_snmp_log(entry) for entry in reversed(logs[-limit:])]
-
-
-def snmp_log_path(ip_address: str) -> Path:
-    safe_ip = "".join(char if char.isalnum() or char in ".-" else "_" for char in ip_address)
-    return SNMP_LOG_DIR / f"{safe_ip}.json"
-
-
-def format_snmp_log(entry: dict[str, object]) -> dict[str, object]:
-    metrics = entry.get("metrics") if isinstance(entry.get("metrics"), dict) else {}
-    ram = metrics.get("ram") if isinstance(metrics.get("ram"), dict) else {}
-    open_ports = metrics.get("open_ports") if isinstance(metrics.get("open_ports"), list) else []
-    processes = metrics.get("processes") if isinstance(metrics.get("processes"), list) else []
-    usb = metrics.get("usb") if isinstance(metrics.get("usb"), list) else []
-
-    return {
-        "received": entry.get("received") or "Unknown",
-        "ip": metrics.get("ip") or "Unknown",
-        "name": metrics.get("name") or "Unknown",
-        "description": metrics.get("description") or "",
-        "cpu": metrics.get("cpu"),
-        "ram_percent": ram.get("percent"),
-        "ram_used_mb": ram.get("used_mb"),
-        "ram_total_mb": ram.get("total_mb"),
-        "process_count": len(processes),
-        "usb_count": len([item for item in usb if not str(item).startswith("No USB")]),
-        "open_ports": open_ports,
-        "top_processes": processes[:8],
-    }
+    rows = payload if isinstance(payload, list) else [payload]
+    rows_by_name = {str(row.get("Name")): row for row in rows if isinstance(row, dict)}
+    logs = []
+    for name in channel_names:
+        row = rows_by_name.get(name, {})
+        raw_events = row.get("Events") if isinstance(row.get("Events"), list) else []
+        events = [{
+            "timestamp": str(event.get("TimeCreated") or "Unknown"),
+            "event_id": event.get("Id"),
+            "level": event.get("LevelDisplayName") or "Information",
+            "source": event.get("ProviderName") or name,
+            "message": str(event.get("Message") or "No message").strip(),
+        } for event in raw_events if isinstance(event, dict)]
+        error = row.get("Error")
+        if timed_out:
+            error = "Reading all Windows log entries timed out; use a numeric limit for this large log set."
+        logs.append({"name": name, "events": events if limit is None else events[:limit], "error": error})
+    return logs
 
 
 def read_collector_logs(limit: int = 25) -> dict[str, object]:
@@ -705,7 +705,7 @@ def service_category(name: str, display_name: str) -> str:
     categories = {
         "security": ("defender", "firewall", "security", "antivirus", "malware"),
         "remote": ("remote", "rdp", "ssh", "telnet", "vnc"),
-        "network": ("snmp", "rpc", "event", "wmi", "dns", "dhcp"),
+        "network": ("rpc", "event", "wmi", "dns", "dhcp"),
         "update": ("update", "installer"),
     }
     for category, terms in categories.items():
