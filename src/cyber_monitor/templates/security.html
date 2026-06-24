@@ -579,8 +579,10 @@
       activeTab = name;
       document.getElementById("localPanel").classList.toggle("active", name === "local");
       document.getElementById("networkPanel").classList.toggle("active", name === "network");
+      document.getElementById("mlPanel").classList.toggle("active", name === "ml");
       document.getElementById("localTab").classList.toggle("active", name === "local");
       document.getElementById("networkTab").classList.toggle("active", name === "network");
+      document.getElementById("mlTab").classList.toggle("active", name === "ml");
     }
 
     function processHead(cpu, memory, disk, network) {
