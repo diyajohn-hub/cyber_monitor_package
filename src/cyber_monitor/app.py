@@ -16,7 +16,7 @@ from flask import Flask, jsonify, render_template, request
 
 from cyber_monitor import server as collector_server
 from cyber_monitor.network import default_cidr, discover_devices, primary_ip
-from cyber_monitor.ml_anomaly import run_anomaly_monitor
+from cyber_monitor.ml_anomaly import run_anomaly_monitor, get_ml_state
 import os
 
 CPU_HISTORY = deque([0] * 10, maxlen=10)
@@ -88,25 +88,12 @@ def create_app() -> Flask:
 
     @app.get("/api/security/anomalies")
     def security_anomalies():
-        anomalies_file = "mnt/master/anomalies.json"
-        if not os.path.exists(anomalies_file):
-            return jsonify([])
-        try:
-            with open(anomalies_file, 'r') as f:
-                return jsonify(json.load(f))
-        except (FileNotFoundError, json.JSONDecodeError):
-            return jsonify([])
+        state = get_ml_state()
+        return jsonify(state.get("anomalies", []))
 
     @app.get("/api/security/ml_stats")
     def security_ml_stats():
-        stats_file = "mnt/master/ml_stats.json"
-        if not os.path.exists(stats_file):
-            return jsonify({"status": "Waiting for ML data...", "hosts": {}})
-        try:
-            with open(stats_file, 'r') as f:
-                return jsonify(json.load(f))
-        except (FileNotFoundError, json.JSONDecodeError):
-            return jsonify({"status": "Error reading ML stats", "hosts": {}})
+        return jsonify(get_ml_state())
 
     @app.get("/api/collector/logs")
     def collector_logs():

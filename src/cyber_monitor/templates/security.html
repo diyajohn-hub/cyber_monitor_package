@@ -405,20 +405,27 @@
             <h2>ML Engine Insights</h2>
             <div class="muted">Live status of the Isolation Forest anomaly detector.</div>
           </div>
-          <div class="muted" id="mlTimestamp">Waiting for ML data...</div>
+          <div id="mlTimestamp" class="muted">Waiting for ML data...</div>
         </div>
+
+        <div id="mlPhase" style="margin-bottom: 14px; padding: 10px 14px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); font-size: 0.9rem;">
+          Phase: <strong>Initialising</strong>
+        </div>
+
         <div class="table-wrap">
           <table class="task-table">
             <thead>
               <tr>
-                <th>Hostname</th>
-                <th>Training Status</th>
-                <th>Data Points Logged</th>
-                <th>Current Anomaly Score</th>
+                <th style="width: 18%;">Hostname</th>
+                <th style="width: 18%;">Status</th>
+                <th style="width: 14%;">Progress</th>
+                <th style="width: 20%;">Live Reading</th>
+                <th style="width: 14%;">Score</th>
+                <th style="width: 16%;">Verdict</th>
               </tr>
             </thead>
             <tbody id="mlTableBody">
-              <tr><td colspan="4" style="text-align: center;" class="muted">No data available</td></tr>
+              <tr><td colspan="6" style="text-align: center;" class="muted">Collecting first reading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -933,23 +940,68 @@
         if (data.timestamp) {
           document.getElementById('mlTimestamp').innerText = "Last Updated: " + data.timestamp;
         }
+
+        const phaseEl = document.getElementById('mlPhase');
+        const phaseColor = data.phase === 'Active' ? 'var(--green)' : 'var(--orange)';
+        phaseEl.innerHTML = `Phase: <strong style="color: ${phaseColor}">${data.phase || 'Initialising'}</strong>`;
         
         const tbody = document.getElementById('mlTableBody');
         if (data.hosts && Object.keys(data.hosts).length > 0) {
           tbody.innerHTML = '';
-          for (const [host, stats] of Object.entries(data.hosts)) {
-            const statusText = stats.trained ? '<span style="color: var(--green)">Trained (Active)</span>' : '<span style="color: var(--orange)">Training Baseline...</span>';
-            const scoreColor = stats.last_score < 0 ? 'var(--red)' : 'var(--text)';
-            
+          for (const [host, s] of Object.entries(data.hosts)) {
+
+            // Status badge
+            const statusColor = s.trained ? 'var(--green)' : 'var(--orange)';
+            const statusText = s.trained
+              ? '<span style="color: var(--green)">&#x2713; Active</span>'
+              : '<span style="color: var(--orange)">&#x23F3; Collecting</span>';
+
+            // Progress bar
+            const pct = s.progress_pct || 0;
+            const barColor = pct >= 100 ? 'var(--green)' : 'var(--cyan)';
+            const progressBar = `
+              <div style="background: var(--panel-2); border-radius: 4px; height: 18px; position: relative; overflow: hidden; border: 1px solid var(--border);">
+                <div style="background: ${barColor}; height: 100%; width: ${pct}%; transition: width 0.5s;"></div>
+                <span style="position: absolute; top: 0; left: 0; width: 100%; text-align: center; font-size: 0.75rem; line-height: 18px;">${s.data_points}/${s.needed}</span>
+              </div>`;
+
+            // Live reading
+            const r = s.last_reading || {};
+            const reading = `CPU <strong>${r.cpu ?? '-'}%</strong> · RAM <strong>${r.ram ?? '-'}%</strong>`;
+
+            // Score
+            let scoreHtml;
+            if (s.last_score === null || s.last_score === undefined) {
+              scoreHtml = '<span class="muted">—</span>';
+            } else {
+              const sc = s.last_score;
+              const sColor = sc < 0 ? 'var(--red)' : 'var(--green)';
+              scoreHtml = `<strong style="color: ${sColor}">${sc}</strong>`;
+            }
+
+            // Verdict
+            let verdictHtml;
+            if (s.verdict === 'ANOMALY') {
+              verdictHtml = '<span style="color: #0b0d12; background: var(--red); padding: 3px 10px; border-radius: 4px; font-weight: 700; font-size: 0.8rem;">ANOMALY</span>';
+            } else if (s.verdict === 'Normal') {
+              verdictHtml = '<span style="color: var(--green); font-weight: 600;">Normal</span>';
+            } else {
+              verdictHtml = '<span class="muted">N/A</span>';
+            }
+
             tbody.innerHTML += `
               <tr>
-                <td><strong>${host}</strong></td>
+                <td><strong>${escapeHtml(host)}</strong></td>
                 <td>${statusText}</td>
-                <td>${stats.data_points}</td>
-                <td style="color: ${scoreColor}">${stats.last_score}</td>
+                <td>${progressBar}</td>
+                <td style="font-size: 0.85rem;">${reading}</td>
+                <td>${scoreHtml}</td>
+                <td>${verdictHtml}</td>
               </tr>
             `;
           }
+        } else if (!data.timestamp) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;" class="muted">Collecting first reading...</td></tr>';
         }
       } catch (e) {
         console.error('Failed to fetch ML stats:', e);
