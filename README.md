@@ -42,7 +42,7 @@ You can also run:
 
 - `/` shows CPU usage, RAM usage, and USB/removable storage connections for this device.
 - `/network` scans a local IPv4 CIDR range and lists devices found through ping and ARP, with reverse-DNS names and common open TCP ports.
-- `/logs` shows recent events from the five standard Windows Event Viewer logs: Application, Security, Setup, System, and Forwarded Events.
+- `/logs` separates local and client Windows Event Viewer logs, with Application, Security, Setup, System, and Forwarded Events shown for each source.
 - `/security` shows live local processes, memory usage, and OS services.
 
 ## Local live APIs
@@ -53,6 +53,7 @@ You can also run:
 - `/api/security/local` combines OS, memory, service, and alert data for the Security View.
 - `/api/network/scan` discovers reachable devices in a local IPv4 range.
 - `/api/system/logs` returns recent events grouped by the five standard Windows Event Viewer logs.
+- `/api/collector/windows-logs` reads the collector log file on demand and returns deduplicated Windows events received from each client system.
 
 The network page warms the ARP cache with a parallel ping sweep, includes devices from the ARP table, and checks a small set of common TCP ports.
 

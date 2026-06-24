@@ -9,3 +9,6 @@ venv/
 
 mnt/hosts/
 mnt/master/log.json
+mnt/*.json
+mnt/hosts/*.json
+mnt/master/*.json

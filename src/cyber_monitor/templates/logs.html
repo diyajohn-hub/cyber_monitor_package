@@ -1,13 +1,133 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Windows Logs | Cyber Monitor</title>
-<style>:root{color-scheme:dark;--bg:#090b10;--panel:#111620;--border:#263244;--text:#e6edf7;--muted:#8b9bb2;--cyan:#32d5ff;--red:#ff5c7a}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Consolas,"Courier New",monospace}.shell{width:min(1180px,calc(100% - 32px));margin:auto;padding:28px 0}header{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:22px}h1{margin:0}nav,.tabs{display:flex;gap:10px;flex-wrap:wrap}nav a,button{border:1px solid var(--border);border-radius:6px;color:var(--text);padding:9px 12px;text-decoration:none;background:#121a27;font:inherit;cursor:pointer}nav a.active,.tab.active{border-color:var(--cyan);color:var(--cyan);background:#102134}.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:18px}.head{display:flex;justify-content:space-between;gap:12px;align-items:center}.muted{color:var(--muted);font-size:.84rem}.tabs{margin:18px 0 14px}.tab .count{color:var(--muted);margin-left:5px}.logs{display:grid;gap:10px}.log{background:#0d1118;border:1px solid var(--border);border-left:3px solid var(--cyan);padding:14px;border-radius:6px}.log.error,.log.critical{border-left-color:var(--red)}.meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:.8rem;color:var(--muted)}.message{white-space:pre-wrap;overflow-wrap:anywhere}.empty{padding:25px;color:var(--muted);text-align:center}@media(max-width:700px){header,.head{align-items:flex-start;flex-direction:column}}</style></head>
-<body><main class="shell"><header><div><h1>Windows Event Logs</h1><div class="muted">Application, Security, Setup, System, and Forwarded Events</div></div><nav aria-label="Primary navigation"><a href="/">This Device</a><a href="/network">Network Devices</a><a class="active" href="/logs">Windows Logs</a><a href="/security">Security View</a></nav></header><section class="panel"><div class="head"><div><strong id="host">Loading host...</strong><div class="muted" id="status">Reading Windows Event Logs...</div></div><button onclick="loadLogs()">Refresh</button></div><div class="tabs" id="tabs" role="tablist"></div><div class="logs" id="events"></div></section></main>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Windows Logs | Cyber Monitor</title>
+  <style>
+    :root{color-scheme:dark;--bg:#090b10;--panel:#111620;--border:#263244;--text:#e6edf7;--muted:#8b9bb2;--cyan:#32d5ff;--red:#ff5c7a;--amber:#ffc857;--green:#54e39e}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Consolas,"Courier New",monospace}
+    .shell{width:min(1180px,calc(100% - 32px));margin:auto;padding:28px 0}
+    header{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:22px}
+    h1{margin:0}nav,.tabs,.view-tabs,.client-tabs,.toolbar,.pager,.summary{display:flex;gap:10px;flex-wrap:wrap}
+    nav a,button,input,select{border:1px solid var(--border);border-radius:6px;color:var(--text);padding:9px 12px;background:#121a27;font:inherit}
+    nav a{text-decoration:none}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.45}
+    nav a.active,.tab.active,.view-tab.active,.client-tab.active{border-color:var(--cyan);color:var(--cyan);background:#102134}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:18px}
+    .head{display:flex;justify-content:space-between;gap:12px;align-items:center}
+    .muted{color:var(--muted);font-size:.84rem}.view-tabs{margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+    .view-tab{font-weight:700}.client-tabs{margin:18px 0 0}.client-tab{text-align:left}
+    .client-tab small{display:block;color:var(--muted);margin-top:3px}.summary{margin:16px 0}
+    .summary-card{min-width:145px;padding:12px 14px;border:1px solid var(--border);border-radius:7px;background:#0d131c}
+    .summary-card strong{display:block;color:var(--cyan);font-size:1.15rem;margin-top:4px}.toolbar{align-items:center;margin:16px 0}
+    .toolbar input{flex:1;min-width:220px}.tabs{margin:18px 0 14px}.tab .count{color:var(--muted);margin-left:5px}
+    .result-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 12px}
+    .logs{display:grid;gap:10px}.log{background:#0d1118;border:1px solid var(--border);border-left:3px solid var(--cyan);padding:14px;border-radius:6px}
+    .log.error,.log.critical{border-left-color:var(--red)}.log.warning{border-left-color:var(--amber)}
+    .meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:.8rem;color:var(--muted)}
+    .level{color:var(--green)}.log.error .level,.log.critical .level{color:var(--red)}.log.warning .level{color:var(--amber)}
+    .message{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}.empty{padding:25px;color:var(--muted);text-align:center}
+    .pager{justify-content:center;align-items:center;margin-top:16px}
+    [hidden]{display:none!important}
+    @media(max-width:700px){header,.head,.result-bar{align-items:flex-start;flex-direction:column}.toolbar>*{width:100%}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header>
+    <div><h1>Windows Event Logs</h1><div class="muted">Application, Security, Setup, System, and Forwarded Events</div></div>
+    <nav aria-label="Primary navigation"><a href="/">This Device</a><a href="/network">Network Devices</a><a class="active" href="/logs">Windows Logs</a><a href="/security">Security View</a></nav>
+  </header>
+  <section class="panel">
+    <div class="view-tabs" role="tablist" aria-label="Windows log source">
+      <button id="localViewTab" class="view-tab active" onclick="selectView('local')">Local Windows Logs</button>
+      <button id="clientViewTab" class="view-tab" onclick="selectView('client')">Client Windows Logs</button>
+    </div>
+    <div class="head">
+      <div><strong id="host">Loading host...</strong><div class="muted" id="status">Reading Windows Event Logs...</div></div>
+      <button id="refreshButton" onclick="loadActiveLogs()">Refresh</button>
+    </div>
+    <div class="client-tabs" id="clients" role="tablist" aria-label="Client systems" hidden></div>
+    <div class="summary" id="clientSummary" hidden></div>
+    <div class="tabs" id="tabs" role="tablist" aria-label="Windows log channels"></div>
+    <div class="toolbar" id="clientToolbar" hidden>
+      <input id="logSearch" type="search" placeholder="Search event ID, source, message, timestamp..." onkeydown="if(event.key==='Enter')applyClientFilters()">
+      <select id="levelFilter" aria-label="Filter by level" onchange="applyClientFilters()">
+        <option value="">All levels</option><option>Critical</option><option>Error</option><option>Warning</option><option>Information</option><option>Verbose</option>
+      </select>
+      <select id="pageSize" aria-label="Events per page" onchange="changePageSize()">
+        <option value="50">50 per page</option><option value="100" selected>100 per page</option><option value="250">250 per page</option><option value="500">500 per page</option>
+      </select>
+      <button onclick="applyClientFilters()">Search</button>
+      <button onclick="clearClientFilters()">Clear</button>
+    </div>
+    <div class="result-bar" id="resultBar" hidden><span class="muted" id="resultCount"></span><span class="muted" id="pageLabel"></span></div>
+    <div class="logs" id="events"></div>
+    <div class="pager" id="pager" hidden>
+      <button id="previousPage" onclick="changeClientPage(-1)">Previous</button>
+      <button id="nextPage" onclick="changeClientPage(1)">Next</button>
+    </div>
+  </section>
+</main>
 <script>
-let channels=[],activeChannel='Application';const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function normalizeChannels(logs){const expected=['Application','Security','Setup','System','ForwardedEvents'],rows=Array.isArray(logs)?logs:[];return expected.map(name=>{const row=rows.find(item=>item&&item.name===name)||{};return{name,events:Array.isArray(row.events)?row.events:[],error:row.error||null}})}
+let activeView='local',localChannels=[],clientSystems=[],activeClientId='',activeChannel='Application',clientDetail=null,clientPage=1;
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function normalizeChannels(logs){const rows=Array.isArray(logs)?logs.filter(item=>item&&item.name):[];return rows.map(row=>({name:String(row.name),events:Array.isArray(row.events)?row.events:[],count:Number.isFinite(Number(row.count))?Number(row.count):(Array.isArray(row.events)?row.events.length:0),error:row.error||null}))}
 function formatTime(value){const match=String(value??'').match(/^\/Date\((\d+)\)\/$/);return match?new Date(Number(match[1])).toLocaleString():String(value??'Unknown')}
-function render(){document.getElementById('tabs').innerHTML=channels.map(channel=>`<button class="tab ${channel.name===activeChannel?'active':''}" onclick="selectChannel('${esc(channel.name)}')">${esc(channel.name==='ForwardedEvents'?'Forwarded Events':channel.name)} <span class="count">${channel.events.length}</span></button>`).join('');const channel=channels.find(item=>item.name===activeChannel);if(!channel){document.getElementById('events').innerHTML='<div class="empty">No Windows log channels were returned.</div>';return}if(channel.error){document.getElementById('events').innerHTML=`<div class="empty">${esc(channel.error)}</div>`;return}document.getElementById('events').innerHTML=channel.events.length?channel.events.map(event=>`<article class="log ${esc(String(event.level).toLowerCase())}"><div class="meta"><span>${esc(formatTime(event.timestamp))}</span><span>${esc(event.level)}</span><span>Event ${esc(event.event_id)}</span><span>${esc(event.source)}</span></div><div class="message">${esc(event.message)}</div></article>`).join(''):'<div class="empty">This Windows log contains no recent events.</div>'}
-function selectChannel(name){activeChannel=name;render()}
-async function loadLogs(){const status=document.getElementById('status');status.textContent='Reading entries from all five Windows Event Logs...';try{const response=await fetch('/api/system/logs?limit=1000'),data=await response.json();if(!response.ok)throw new Error(data.error||`Request failed (${response.status})`);document.getElementById('host').textContent=data.hostname||'This device';channels=normalizeChannels(data.logs);const total=channels.reduce((sum,channel)=>sum+channel.events.length,0);status.textContent=`Loaded ${total} event(s) from ${channels.length} Windows log channels.`;render()}catch(error){channels=normalizeChannels([]);render();status.textContent=`Could not load Windows logs: ${error.message}`}}
-loadLogs();
-</script></body></html>
+function currentClient(){return clientSystems.find(system=>system.id===activeClientId)}
+function currentChannels(){return activeView==='local'?localChannels:normalizeChannels(currentClient()?.logs)}
+function render(){
+  const clients=document.getElementById('clients'),channels=currentChannels(),system=currentClient(),isClient=activeView==='client';
+  document.getElementById('localViewTab').classList.toggle('active',!isClient);
+  document.getElementById('clientViewTab').classList.toggle('active',isClient);
+  clients.hidden=!isClient||!clientSystems.length;
+  clients.innerHTML=isClient?clientSystems.map(item=>`<button class="client-tab ${item.id===activeClientId?'active':''}" data-id="${esc(item.id)}" onclick="selectClient(this.dataset.id)">${esc(item.hostname)}<small>${esc(item.ip)} · ${Number(item.total_count||0).toLocaleString()} events</small></button>`).join(''):'';
+  document.getElementById('clientSummary').hidden=!isClient||!system;
+  document.getElementById('clientSummary').innerHTML=isClient&&system?`<div class="summary-card"><span class="muted">Stored events</span><strong>${Number(system.total_count||0).toLocaleString()}</strong></div><div class="summary-card"><span class="muted">Log channels</span><strong>${normalizeChannels(system.logs).length}</strong></div><div class="summary-card"><span class="muted">Client timestamp</span><strong style="font-size:.82rem">${esc(system.client_timestamp)}</strong></div>`:'';
+  document.getElementById('tabs').innerHTML=channels.map(channel=>`<button class="tab ${channel.name===activeChannel?'active':''}" data-channel="${esc(channel.name)}" onclick="selectChannel(this.dataset.channel)">${esc(channel.name==='ForwardedEvents'?'Forwarded Events':channel.name)} <span class="count">${Number(channel.count).toLocaleString()}</span></button>`).join('');
+  document.getElementById('clientToolbar').hidden=!isClient||!system;
+  const channel=channels.find(item=>item.name===activeChannel),events=isClient?(clientDetail?.events||[]):(channel?.events||[]);
+  document.getElementById('resultBar').hidden=!isClient||!clientDetail;
+  document.getElementById('pager').hidden=!isClient||!clientDetail||clientDetail.page_count<=1;
+  if(isClient&&clientDetail){
+    document.getElementById('resultCount').textContent=`${Number(clientDetail.count).toLocaleString()} matching event(s)`;
+    document.getElementById('pageLabel').textContent=`Page ${clientDetail.page} of ${clientDetail.page_count}`;
+    document.getElementById('previousPage').disabled=clientDetail.page<=1;
+    document.getElementById('nextPage').disabled=clientDetail.page>=clientDetail.page_count;
+  }
+  if(isClient&&!clientSystems.length){document.getElementById('events').innerHTML='<div class="empty">No client Windows logs have been received yet.</div>';return}
+  if(!channel){document.getElementById('events').innerHTML='<div class="empty">No Windows log channels were returned.</div>';return}
+  if(channel.error){document.getElementById('events').innerHTML=`<div class="empty">${esc(channel.error)}</div>`;return}
+  if(isClient&&!clientDetail){document.getElementById('events').innerHTML='<div class="empty">Loading client events...</div>';return}
+  document.getElementById('events').innerHTML=events.length?events.map(event=>`<article class="log ${esc(String(event.level).toLowerCase())}"><div class="meta"><span>${esc(formatTime(event.timestamp))}</span><span class="level">${esc(event.level)}</span><span>Event ${esc(event.event_id)}</span>${event.record_id!=null?`<span>Record ${esc(event.record_id)}</span>`:''}<span>${esc(event.source)}</span></div><div class="message">${esc(event.message||'No message')}</div></article>`).join(''):'<div class="empty">This Windows log contains no matching events.</div>';
+}
+function selectChannel(name){activeChannel=name;if(activeView==='client'){clientPage=1;clientDetail=null;render();loadClientChannel()}else render()}
+function selectClient(id){activeClientId=id;activeChannel='Application';clientPage=1;clientDetail=null;updateClientHeading();render();loadClientChannel()}
+function selectView(view){activeView=view;activeChannel='Application';clientDetail=null;if(view==='local'){updateLocalHeading();render();if(!localChannels.length)loadLocalLogs()}else{updateClientHeading();render();if(!clientSystems.length)loadClientLogs();else loadClientChannel()}}
+function updateLocalHeading(){const host=document.getElementById('host'),status=document.getElementById('status');host.textContent=host.dataset.localHost||'This device';status.textContent=status.dataset.localStatus||'Local Windows Event Logs.'}
+function updateClientHeading(){const system=currentClient(),host=document.getElementById('host'),status=document.getElementById('status');host.textContent=system?`${system.hostname} (${system.ip})`:'Client systems';status.textContent=system?`Latest Windows logs received ${system.received}.`:'Waiting for client Windows logs.'}
+async function loadLocalLogs(){
+  const status=document.getElementById('status');status.textContent='Reading entries from all five local Windows Event Logs...';
+  try{const response=await fetch(`/api/system/logs?limit=1000&_=${Date.now()}`,{cache:'no-store'}),data=await response.json();if(!response.ok)throw new Error(data.error||`Request failed (${response.status})`);localChannels=normalizeChannels(data.logs);const total=localChannels.reduce((sum,channel)=>sum+channel.events.length,0),host=data.hostname||'This device',message=`Loaded ${total} local event(s) from ${localChannels.length} Windows log channels.`;document.getElementById('host').dataset.localHost=host;status.dataset.localStatus=message;if(activeView==='local'){updateLocalHeading();render()}}catch(error){localChannels=[];status.dataset.localStatus=`Could not load local Windows logs: ${error.message}`;if(activeView==='local'){updateLocalHeading();render()}}
+}
+async function loadClientLogs(){
+  const status=document.getElementById('status'),button=document.getElementById('refreshButton');status.textContent='Loading Windows Event Logs received from clients...';button.disabled=true;
+  try{const response=await fetch(`/api/collector/windows-logs?_=${Date.now()}`,{cache:'no-store'}),data=await response.json();if(!response.ok)throw new Error(data.error||`Request failed (${response.status})`);clientSystems=Array.isArray(data.systems)?data.systems:[];if(!clientSystems.some(system=>system.id===activeClientId))activeClientId=clientSystems[0]?.id||'';if(activeView==='client'){updateClientHeading();render();if(activeClientId)await loadClientChannel()}}catch(error){clientSystems=[];activeClientId='';clientDetail=null;if(activeView==='client'){document.getElementById('host').textContent='Client systems';status.textContent=`Could not load client Windows logs: ${error.message}`;render()}}finally{button.disabled=false}
+}
+async function loadClientChannel(){
+  const system=currentClient();if(!system)return;
+  const params=new URLSearchParams({hostname:system.hostname,channel:activeChannel,page:String(clientPage),page_size:document.getElementById('pageSize').value,query:document.getElementById('logSearch').value.trim(),level:document.getElementById('levelFilter').value});
+  document.getElementById('events').innerHTML='<div class="empty">Loading client events...</div>';
+  params.set('_',String(Date.now()));
+  try{const response=await fetch(`/api/collector/windows-logs?${params}`,{cache:'no-store'}),data=await response.json();if(!response.ok||data.detail?.error)throw new Error(data.detail?.error||data.error||`Request failed (${response.status})`);clientDetail=data.detail;clientPage=clientDetail.page;render()}catch(error){clientDetail={events:[],count:0,page:1,page_count:1};document.getElementById('events').innerHTML=`<div class="empty">Could not load client events: ${esc(error.message)}</div>`}
+}
+function applyClientFilters(){clientPage=1;loadClientChannel()}
+function clearClientFilters(){document.getElementById('logSearch').value='';document.getElementById('levelFilter').value='';clientPage=1;loadClientChannel()}
+function changePageSize(){clientPage=1;loadClientChannel()}
+function changeClientPage(delta){if(!clientDetail)return;clientPage=Math.max(1,Math.min(clientDetail.page_count,clientDetail.page+delta));loadClientChannel();window.scrollTo({top:document.getElementById('tabs').offsetTop-20,behavior:'smooth'})}
+function loadActiveLogs(){return activeView==='local'?loadLocalLogs():loadClientLogs()}
+loadLocalLogs();
+setInterval(()=>{if(activeView==='client')loadClientLogs()},10000);
+</script>
+</body>
+</html>

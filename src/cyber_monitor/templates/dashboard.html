@@ -512,38 +512,53 @@
         }
 
         async function refreshCollectorStatus() {
-            const response = await fetch('/api/collector/status');
-            const data = await response.json();
-
-            document.getElementById('collectorState').textContent = data.running ? 'Running' : 'Stopped';
-            document.getElementById('collectorPort').textContent = data.port;
-            document.getElementById('collectorPath').textContent = data.master_log;
+            try {
+                const response = await fetch('/api/collector/status', { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                document.getElementById('collectorState').textContent = data.running ? 'Running' : 'Stopped';
+                document.getElementById('collectorPort').textContent = data.port;
+                document.getElementById('collectorPath').textContent = data.master_log;
+            } catch (error) {
+                document.getElementById('collectorState').textContent = 'Unavailable';
+                log(`Collector status refresh failed: ${error.message}`);
+            }
         }
 
         async function refreshCollectorLogs() {
-            const response = await fetch('/api/collector/logs?limit=20');
-            const data = await response.json();
             const systemsContainer = document.getElementById('collectorSystems');
+            try {
+                const response = await fetch(`/api/collector/logs?limit=20&_=${Date.now()}`, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                const hosts = Array.isArray(data.hosts) ? data.hosts : [];
+                const systems = Array.isArray(data.systems) ? data.systems : [];
 
-            document.getElementById('collectorEntries').textContent = data.count;
-            document.getElementById('collectorHosts').textContent = data.hosts.length;
-            document.getElementById('collectorPath').textContent = data.host_log_dir || data.path;
+                document.getElementById('collectorEntries').textContent = data.count ?? 0;
+                document.getElementById('collectorHosts').textContent = hosts.length;
+                document.getElementById('collectorPath').textContent = data.host_log_dir || data.path;
 
-            systemsContainer.innerHTML = '';
-            if (!data.systems.length) {
-                const empty = document.createElement('div');
-                empty.className = 'empty-state';
-                empty.textContent = 'No collector logs yet. Start an agent and send metrics to this machine on port 5000.';
-                systemsContainer.appendChild(empty);
-                return;
+                systemsContainer.innerHTML = '';
+                if (!systems.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty-state';
+                    empty.textContent = 'No collector logs yet. Start an agent and send metrics to this machine on port 5000.';
+                    systemsContainer.appendChild(empty);
+                    return;
+                }
+
+                systems.forEach(system => {
+                    const card = document.createElement('article');
+                    card.className = 'system-card';
+                    card.innerHTML = renderSystemCard(system);
+                    systemsContainer.appendChild(card);
+                });
+            } catch (error) {
+                log(`Collector log refresh failed: ${error.message}`);
+                if (!systemsContainer.children.length) {
+                    systemsContainer.innerHTML = `<div class="empty-state">Collector logs could not be refreshed: ${escapeHtml(error.message)}</div>`;
+                }
             }
-
-            data.systems.forEach(system => {
-                const card = document.createElement('article');
-                card.className = 'system-card';
-                card.innerHTML = renderSystemCard(system);
-                systemsContainer.appendChild(card);
-            });
         }
 
         function renderSystemCard(system) {

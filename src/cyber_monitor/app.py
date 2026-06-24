@@ -33,6 +33,14 @@ def template_dir() -> str:
 def create_app() -> Flask:
     app = Flask(__name__, template_folder=template_dir())
 
+    @app.after_request
+    def disable_api_cache(response):
+        if request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
     @app.get("/")
     def local_dashboard():
         return render_template("dashboard.html")
@@ -84,8 +92,8 @@ def create_app() -> Flask:
         return jsonify(
             {
                 "host": collector_server.HOST,
-                "port": collector_server.PORT,
-                "master_log": str(collector_server.MASTER_LOG),
+                "port": collector_server.TELEMETRY_PORT,
+                "master_log": str(collector_server.MASTER_TELEMETRY_LOG),
                 "host_log_dir": str(collector_server.HOST_DIR),
                 "running": bool(COLLECTOR_THREAD and COLLECTOR_THREAD.is_alive()),
             }
@@ -132,6 +140,28 @@ def create_app() -> Flask:
             except ValueError:
                 limit = 200
         return jsonify({"hostname": socket.gethostname(), "logs": read_windows_logs(limit)})
+
+    @app.get("/api/collector/windows-logs")
+    def collector_windows_logs():
+        hostname = str(request.args.get("hostname") or "").strip()
+        channel = str(request.args.get("channel") or "").strip()
+        query = str(request.args.get("query") or "").strip()
+        level = str(request.args.get("level") or "").strip()
+        try:
+            page = max(1, int(request.args.get("page") or 1))
+            page_size = max(10, min(int(request.args.get("page_size") or 100), 500))
+        except ValueError:
+            page, page_size = 1, 100
+
+        if hostname and channel:
+            return jsonify(
+                {
+                    "detail": read_client_windows_log_channel(
+                        hostname, channel, page, page_size, query, level
+                    )
+                }
+            )
+        return jsonify({"systems": read_client_windows_logs()})
 
     return app
 
@@ -189,8 +219,127 @@ def read_windows_logs(limit: int | None = None) -> list[dict[str, object]]:
     return logs
 
 
+def read_client_windows_logs() -> list[dict[str, object]]:
+    host_dir = Path(collector_server.HOST_DIR)
+    latest_winlog_entries: dict[str, dict[str, object]] = {}
+    for entry in load_log_file(Path(collector_server.MASTER_WINLOG_LOG)):
+        hostname = str(entry.get("hostname") or "")
+        if hostname:
+            latest_winlog_entries[hostname] = entry
+
+    systems = []
+    for path in sorted(host_dir.glob("*_winlogs.json")):
+        hostname = path.name.removesuffix("_winlogs.json")
+        state = load_json_object(path)
+        if not state:
+            continue
+
+        telemetry = latest_host_telemetry(host_dir / f"{hostname}.json")
+        metrics = telemetry.get("metrics") if isinstance(telemetry.get("metrics"), dict) else {}
+        latest_winlog = latest_winlog_entries.get(hostname, {})
+        logs = []
+        total_count = 0
+        for channel_name in collector_server.EVENT_CHANNELS:
+            raw_events = state.get(channel_name)
+            events = raw_events if isinstance(raw_events, list) else []
+            count = sum(1 for event in events if isinstance(event, dict) and not event.get("error"))
+            error = next(
+                (str(event["error"]) for event in events if isinstance(event, dict) and event.get("error")),
+                None,
+            )
+            logs.append({"name": channel_name, "count": count, "events": [], "error": error})
+            total_count += count
+
+        systems.append(
+            {
+                "id": hostname,
+                "hostname": hostname,
+                "ip": str(metrics.get("ip") or "Unknown"),
+                "received": latest_winlog.get("received")
+                or datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                "client_timestamp": latest_winlog.get("timestamp") or "Unknown",
+                "total_count": total_count,
+                "logs": logs,
+            }
+        )
+
+    return sorted(systems, key=lambda item: str(item["hostname"]).lower())
+
+
+def read_client_windows_log_channel(
+    hostname: str,
+    channel_name: str,
+    page: int,
+    page_size: int,
+    query: str = "",
+    level: str = "",
+) -> dict[str, object]:
+    safe_hostname = Path(hostname).name
+    if safe_hostname != hostname or channel_name not in collector_server.EVENT_CHANNELS:
+        return {"error": "Unknown client or Windows log channel.", "events": [], "count": 0}
+
+    state = load_json_object(Path(collector_server.HOST_DIR) / f"{safe_hostname}_winlogs.json")
+    raw_events = state.get(channel_name)
+    events = []
+    for event in raw_events if isinstance(raw_events, list) else []:
+        if not isinstance(event, dict) or event.get("error"):
+            continue
+        normalized = {
+            "record_id": event.get("record_id"),
+            "timestamp": str(event.get("timestamp") or "Unknown"),
+            "event_id": event.get("event_id"),
+            "level": str(event.get("level") or "Information"),
+            "source": str(event.get("source") or channel_name),
+            "message": str(event.get("message") or "").strip(),
+        }
+        haystack = " ".join(str(value) for value in normalized.values()).lower()
+        if query and query.lower() not in haystack:
+            continue
+        if level and normalized["level"].lower() != level.lower():
+            continue
+        events.append(normalized)
+
+    events.sort(
+        key=lambda event: (str(event.get("timestamp") or ""), int(event.get("record_id") or 0)),
+        reverse=True,
+    )
+    count = len(events)
+    page_count = max(1, (count + page_size - 1) // page_size)
+    page = min(page, page_count)
+    start = (page - 1) * page_size
+    return {
+        "hostname": safe_hostname,
+        "channel": channel_name,
+        "events": events[start:start + page_size],
+        "count": count,
+        "page": page,
+        "page_size": page_size,
+        "page_count": page_count,
+        "query": query,
+        "level": level,
+    }
+
+
+def load_json_object(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    for attempt in range(3):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return payload if isinstance(payload, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            if attempt < 2:
+                time.sleep(0.05)
+    return {}
+
+
+def latest_host_telemetry(path: Path) -> dict[str, object]:
+    entries = load_log_file(path)
+    return entries[-1] if entries else {}
+
+
 def read_collector_logs(limit: int = 25) -> dict[str, object]:
-    log_path = Path(collector_server.MASTER_LOG)
+    log_path = Path(collector_server.MASTER_TELEMETRY_LOG)
     host_logs_by_path = load_host_log_files(Path(collector_server.HOST_DIR))
     logs = flatten_host_logs(host_logs_by_path)
 
@@ -296,10 +445,14 @@ def load_log_file(path: Path) -> list[dict[str, object]]:
     if not path.exists():
         return []
 
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
+    payload = None
+    for attempt in range(3):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            break
+        except (OSError, json.JSONDecodeError):
+            if attempt < 2:
+                time.sleep(0.05)
 
     if not isinstance(payload, list):
         return []
