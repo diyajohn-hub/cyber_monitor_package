@@ -386,6 +386,12 @@
       </nav>
     </header>
 
+    <div id="anomaly-banner" style="display: none; background: #ff5c7a20; border: 1px solid var(--red); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+      <h3 style="margin: 0 0 8px; color: var(--red);">🚨 ML Anomaly Detected</h3>
+      <div id="anomaly-content" style="font-size: 0.9rem;"></div>
+    </div>
+
+
     <div class="tabs" role="tablist" aria-label="Live monitoring tabs">
       <button class="tab active" id="localTab" onclick="showTab('local')">This Device</button>
       <button class="tab" id="networkTab" onclick="showTab('network')">SNMP Network Devices</button>
@@ -859,6 +865,34 @@
 
     refreshLocal();
     setInterval(refreshLocal, 15000);
+
+    // --- ML Anomaly Polling ---
+    async function checkAnomalies() {
+      try {
+        const res = await fetch('/api/security/anomalies');
+        if (!res.ok) return;
+        const anomalies = await res.json();
+        
+        const banner = document.getElementById('anomaly-banner');
+        const content = document.getElementById('anomaly-content');
+        
+        if (anomalies && anomalies.length > 0) {
+          banner.style.display = 'block';
+          // Show the latest anomaly
+          const latest = anomalies[anomalies.length - 1];
+          content.innerHTML = `<strong>Host:</strong> ${latest.hostname} <br> 
+                               <strong>Time:</strong> ${latest.timestamp} <br>
+                               <strong>CPU:</strong> ${latest.features.cpu_percent}% | <strong>RAM:</strong> ${latest.features.ram_percent}% | <strong>USB Count:</strong> ${latest.features.usb_count}`;
+        } else {
+          banner.style.display = 'none';
+        }
+      } catch (e) {
+        console.error('Failed to check anomalies:', e);
+      }
+    }
+    
+    checkAnomalies();
+    setInterval(checkAnomalies, 5000);
   </script>
 </body>
 </html>
