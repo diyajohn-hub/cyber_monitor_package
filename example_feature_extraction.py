@@ -1,5 +1,6 @@
 import json
 import os
+import numpy as np
 from src.cyber_monitor.ml_anomaly import TelemetryFeatureExtractor
 
 def run_example():
