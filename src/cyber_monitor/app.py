@@ -16,12 +16,15 @@ from flask import Flask, jsonify, render_template, request
 
 from cyber_monitor import server as collector_server
 from cyber_monitor.network import default_cidr, discover_devices, primary_ip
+from cyber_monitor.ml_anomaly import run_anomaly_monitor
+import os
 
 CPU_HISTORY = deque([0] * 10, maxlen=10)
 LOCAL_RAM_HISTORY = deque([0] * 10, maxlen=10)
 SERVICE_STATUS_HISTORY = deque([0] * 10, maxlen=10)
 PROCESS_IO_HISTORY: dict[int, tuple[float, int]] = {}
 COLLECTOR_THREAD: threading.Thread | None = None
+ML_THREAD: threading.Thread | None = None
 
 
 def template_dir() -> str:
@@ -32,6 +35,11 @@ def template_dir() -> str:
 
 def create_app() -> Flask:
     app = Flask(__name__, template_folder=template_dir())
+
+    global ML_THREAD
+    if ML_THREAD is None:
+        ML_THREAD = threading.Thread(target=run_anomaly_monitor, daemon=True)
+        ML_THREAD.start()
 
     @app.after_request
     def disable_api_cache(response):
@@ -77,6 +85,17 @@ def create_app() -> Flask:
                 "usb": list_usb_devices(),
             }
         )
+
+    @app.get("/api/security/anomalies")
+    def security_anomalies():
+        anomalies_file = "mnt/master/anomalies.json"
+        if not os.path.exists(anomalies_file):
+            return jsonify([])
+        try:
+            with open(anomalies_file, 'r') as f:
+                return jsonify(json.load(f))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return jsonify([])
 
     @app.get("/api/collector/logs")
     def collector_logs():

@@ -1,6 +1,9 @@
 import json
 import pandas as pd
 import numpy as np
+import time
+import os
+import threading
 from sklearn.ensemble import IsolationForest
 
 class TelemetryFeatureExtractor:
@@ -93,4 +96,66 @@ class AnomalyDetector:
             raise ValueError("Model must be trained before calling predict.")
             
         return self.model.predict(live_features)
+
+def run_anomaly_monitor():
+    """
+    Background worker that continuously polls the master logs, trains the baseline 
+    if needed, and outputs anomalies to mnt/master/anomalies.json.
+    """
+    log_file = "mnt/master/log.json"
+    anomalies_file = "mnt/master/anomalies.json"
+    
+    extractor = TelemetryFeatureExtractor()
+    detector = AnomalyDetector(contamination=0.05)
+    
+    # Ensure mnt/master exists
+    os.makedirs(os.path.dirname(anomalies_file), exist_ok=True)
+    
+    print("[ML] Starting Anomaly Monitor thread...")
+    
+    while True:
+        try:
+            time.sleep(5) # Poll every 5 seconds
+            
+            if not os.path.exists(log_file):
+                continue
+                
+            df = extractor.load_and_preprocess(log_file)
+            host_vectors = extractor.extract_host_vectors(df)
+            
+            anomalies_detected = []
+            
+            for host, features in host_vectors.items():
+                if len(features) < 5:
+                    continue # Not enough data for this host yet
+                    
+                # Train baseline if not trained
+                if not detector.is_trained:
+                    detector.train_baseline(features)
+                    print(f"[ML] Baseline trained on host: {host}")
+                    
+                # Predict on the latest row
+                latest_reading = features[-1].reshape(1, -1)
+                pred = detector.predict(latest_reading)
+                
+                if pred[0] == -1:
+                    # It's an anomaly!
+                    anomalies_detected.append({
+                        "timestamp": time.strftime("%H:%M:%S"),
+                        "hostname": host,
+                        "features": {
+                            "cpu_percent": float(latest_reading[0][0]),
+                            "ram_percent": float(latest_reading[0][1]),
+                            "usb_count": int(latest_reading[0][2])
+                        }
+                    })
+            
+            # Write to anomalies file
+            if anomalies_detected:
+                with open(anomalies_file, 'w') as f:
+                    json.dump(anomalies_detected, f)
+                    
+        except Exception as e:
+            print(f"[ML] Error in anomaly monitor: {e}")
+
 
