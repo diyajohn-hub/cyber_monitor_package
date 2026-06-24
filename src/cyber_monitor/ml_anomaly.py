@@ -104,9 +104,10 @@ def run_anomaly_monitor():
     """
     log_file = "mnt/master/log.json"
     anomalies_file = "mnt/master/anomalies.json"
+    stats_file = "mnt/master/ml_stats.json"
     
     extractor = TelemetryFeatureExtractor()
-    detector = AnomalyDetector(contamination=0.05)
+    detectors = {} # dict mapping hostname to AnomalyDetector instance
     
     # Ensure mnt/master exists
     os.makedirs(os.path.dirname(anomalies_file), exist_ok=True)
@@ -124,11 +125,20 @@ def run_anomaly_monitor():
             host_vectors = extractor.extract_host_vectors(df)
             
             anomalies_detected = []
+            ml_stats = {
+                "timestamp": time.strftime("%H:%M:%S"),
+                "hosts": {}
+            }
             
             for host, features in host_vectors.items():
                 if len(features) < 5:
                     continue # Not enough data for this host yet
                     
+                if host not in detectors:
+                    detectors[host] = AnomalyDetector(contamination=0.05)
+                    
+                detector = detectors[host]
+                
                 # Train baseline if not trained
                 if not detector.is_trained:
                     detector.train_baseline(features)
@@ -137,6 +147,16 @@ def run_anomaly_monitor():
                 # Predict on the latest row
                 latest_reading = features[-1].reshape(1, -1)
                 pred = detector.predict(latest_reading)
+                
+                # Get the raw anomaly score (negative = anomaly, positive = normal)
+                score = float(detector.model.decision_function(latest_reading)[0])
+                
+                # Record stats
+                ml_stats["hosts"][host] = {
+                    "trained": detector.is_trained,
+                    "data_points": len(features),
+                    "last_score": round(score, 4)
+                }
                 
                 if pred[0] == -1:
                     # It's an anomaly!
@@ -147,13 +167,18 @@ def run_anomaly_monitor():
                             "cpu_percent": float(latest_reading[0][0]),
                             "ram_percent": float(latest_reading[0][1]),
                             "usb_count": int(latest_reading[0][2])
-                        }
+                        },
+                        "score": round(score, 4)
                     })
             
             # Write to anomalies file
             if anomalies_detected:
                 with open(anomalies_file, 'w') as f:
                     json.dump(anomalies_detected, f)
+                    
+            # Write ML stats file
+            with open(stats_file, 'w') as f:
+                json.dump(ml_stats, f)
                     
         except Exception as e:
             print(f"[ML] Error in anomaly monitor: {e}")

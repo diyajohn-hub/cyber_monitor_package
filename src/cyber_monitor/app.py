@@ -97,6 +97,17 @@ def create_app() -> Flask:
         except (FileNotFoundError, json.JSONDecodeError):
             return jsonify([])
 
+    @app.get("/api/security/ml_stats")
+    def security_ml_stats():
+        stats_file = "mnt/master/ml_stats.json"
+        if not os.path.exists(stats_file):
+            return jsonify({"status": "Waiting for ML data...", "hosts": {}})
+        try:
+            with open(stats_file, 'r') as f:
+                return jsonify(json.load(f))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return jsonify({"status": "Error reading ML stats", "hosts": {}})
+
     @app.get("/api/collector/logs")
     def collector_logs():
         try:

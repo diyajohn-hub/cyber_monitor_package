@@ -395,7 +395,35 @@
     <div class="tabs" role="tablist" aria-label="Live monitoring tabs">
       <button class="tab active" id="localTab" onclick="showTab('local')">This Device</button>
       <button class="tab" id="networkTab" onclick="showTab('network')">SNMP Network Devices</button>
+      <button class="tab" id="mlTab" onclick="showTab('ml')">ML Engine Stats</button>
     </div>
+
+    <section class="tab-panel" id="mlPanel">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>ML Engine Insights</h2>
+            <div class="muted">Live status of the Isolation Forest anomaly detector.</div>
+          </div>
+          <div class="muted" id="mlTimestamp">Waiting for ML data...</div>
+        </div>
+        <div class="table-wrap">
+          <table class="task-table">
+            <thead>
+              <tr>
+                <th>Hostname</th>
+                <th>Training Status</th>
+                <th>Data Points Logged</th>
+                <th>Current Anomaly Score</th>
+              </tr>
+            </thead>
+            <tbody id="mlTableBody">
+              <tr><td colspan="4" style="text-align: center;" class="muted">No data available</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
     <section class="tab-panel active" id="localPanel">
       <div class="summary" id="localSummary"></div>
@@ -893,6 +921,41 @@
     
     checkAnomalies();
     setInterval(checkAnomalies, 5000);
+    // --- ML Engine Stats Polling ---
+    async function checkMLStats() {
+      try {
+        const res = await fetch('/api/security/ml_stats');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.timestamp) {
+          document.getElementById('mlTimestamp').innerText = "Last Updated: " + data.timestamp;
+        }
+        
+        const tbody = document.getElementById('mlTableBody');
+        if (data.hosts && Object.keys(data.hosts).length > 0) {
+          tbody.innerHTML = '';
+          for (const [host, stats] of Object.entries(data.hosts)) {
+            const statusText = stats.trained ? '<span style="color: var(--green)">Trained (Active)</span>' : '<span style="color: var(--orange)">Training Baseline...</span>';
+            const scoreColor = stats.last_score < 0 ? 'var(--red)' : 'var(--text)';
+            
+            tbody.innerHTML += `
+              <tr>
+                <td><strong>${host}</strong></td>
+                <td>${statusText}</td>
+                <td>${stats.data_points}</td>
+                <td style="color: ${scoreColor}">${stats.last_score}</td>
+              </tr>
+            `;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch ML stats:', e);
+      }
+    }
+    
+    checkMLStats();
+    setInterval(checkMLStats, 5000);
   </script>
 </body>
 </html>
