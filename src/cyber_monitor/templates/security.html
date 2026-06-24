@@ -396,6 +396,7 @@
       <button class="tab active" id="localTab" onclick="showTab('local')">This Device</button>
       <button class="tab" id="networkTab" onclick="showTab('network')">SNMP Network Devices</button>
       <button class="tab" id="mlTab" onclick="showTab('ml')">ML Engine Stats</button>
+      <button class="tab" id="historyTab" onclick="showTab('history')">Anomaly History</button>
     </div>
 
     <section class="tab-panel" id="mlPanel">
@@ -426,6 +427,44 @@
             </thead>
             <tbody id="mlTableBody">
               <tr><td colspan="6" style="text-align: center;" class="muted">Collecting first reading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="historyPanel">
+      <div class="summary" id="historySummary"></div>
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Anomaly History Log</h2>
+            <div class="muted">Persistent record of every ML-detected anomaly with process snapshots. This log is never erased by model retraining.</div>
+          </div>
+          <div id="historyMeta" class="muted">Loading...</div>
+        </div>
+        <div class="controls">
+          <input id="historySearch" placeholder="Search by hostname, process, or date" oninput="renderAnomalyHistory()">
+          <select id="historyHostFilter" onchange="renderAnomalyHistory()">
+            <option value="all">All hosts</option>
+          </select>
+          <button class="primary" onclick="refreshAnomalyHistory()">Refresh</button>
+        </div>
+        <div class="table-wrap" style="max-height: 620px;">
+          <table class="task-table" aria-label="Anomaly history">
+            <thead>
+              <tr>
+                <th style="width: 18%;">Timestamp</th>
+                <th style="width: 14%;">Hostname</th>
+                <th style="width: 10%;">CPU %</th>
+                <th style="width: 10%;">RAM %</th>
+                <th style="width: 10%;">USB</th>
+                <th style="width: 12%;">Score</th>
+                <th style="width: 26%;">Top Processes</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <tr><td colspan="7" style="text-align: center;" class="muted">No anomaly history yet.</td></tr>
             </tbody>
           </table>
         </div>
@@ -587,9 +626,12 @@
       document.getElementById("localPanel").classList.toggle("active", name === "local");
       document.getElementById("networkPanel").classList.toggle("active", name === "network");
       document.getElementById("mlPanel").classList.toggle("active", name === "ml");
+      document.getElementById("historyPanel").classList.toggle("active", name === "history");
       document.getElementById("localTab").classList.toggle("active", name === "local");
       document.getElementById("networkTab").classList.toggle("active", name === "network");
       document.getElementById("mlTab").classList.toggle("active", name === "ml");
+      document.getElementById("historyTab").classList.toggle("active", name === "history");
+      if (name === 'history') refreshAnomalyHistory();
     }
 
     function processHead(cpu, memory, disk, network) {
@@ -1010,6 +1052,119 @@
     
     checkMLStats();
     setInterval(checkMLStats, 5000);
+
+    // --- Anomaly History ---
+    let anomalyHistoryData = [];
+    let expandedHistoryIdx = -1;
+
+    async function refreshAnomalyHistory() {
+      try {
+        const res = await fetch('/api/security/anomaly-history?limit=500');
+        if (!res.ok) return;
+        anomalyHistoryData = await res.json();
+        updateHistoryHostFilter();
+        renderAnomalyHistory();
+      } catch (e) {
+        console.error('Failed to fetch anomaly history:', e);
+      }
+    }
+
+    function updateHistoryHostFilter() {
+      const select = document.getElementById('historyHostFilter');
+      const currentVal = select.value;
+      const hosts = [...new Set(anomalyHistoryData.map(e => e.hostname || 'unknown'))];
+      select.innerHTML = '<option value="all">All hosts</option>' +
+        hosts.map(h => `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join('');
+      select.value = hosts.includes(currentVal) ? currentVal : 'all';
+    }
+
+    function renderAnomalyHistory() {
+      const query = document.getElementById('historySearch').value.trim().toLowerCase();
+      const hostFilter = document.getElementById('historyHostFilter').value;
+      const tbody = document.getElementById('historyTableBody');
+
+      let filtered = anomalyHistoryData.filter(entry => {
+        if (hostFilter !== 'all' && entry.hostname !== hostFilter) return false;
+        if (query) {
+          const haystack = [
+            entry.timestamp, entry.hostname,
+            ...(entry.top_processes || []).map(p => p.name)
+          ].join(' ').toLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
+        return true;
+      });
+
+      // Summary
+      const totalCount = anomalyHistoryData.length;
+      const filteredCount = filtered.length;
+      const oldest = anomalyHistoryData.length ? anomalyHistoryData[anomalyHistoryData.length - 1]?.timestamp : '—';
+      const newest = anomalyHistoryData.length ? anomalyHistoryData[0]?.timestamp : '—';
+      summaryItems('historySummary', [
+        ['Total Anomalies Logged', totalCount],
+        ['Showing', filteredCount],
+        ['Latest', newest],
+        ['Oldest', oldest],
+      ]);
+
+      document.getElementById('historyMeta').textContent =
+        `${totalCount} total entries | ${filteredCount} shown`;
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;" class="muted">No anomaly history entries match your filter.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map((entry, idx) => {
+        const f = entry.features || {};
+        const procs = entry.top_processes || [];
+        const scoreVal = entry.score;
+        const sColor = scoreVal < 0 ? 'var(--red)' : 'var(--green)';
+        const isExpanded = expandedHistoryIdx === idx;
+
+        // Process summary: top 3 names
+        const procSummary = procs.slice(0, 3).map(p =>
+          `${escapeHtml(p.name)} (${p.cpu_percent}%)`
+        ).join(', ');
+        const moreCount = procs.length > 3 ? ` +${procs.length - 3} more` : '';
+
+        let row = `<tr class="clickable-row" onclick="toggleHistoryRow(${idx})" title="Click to see all processes">
+          <td>${escapeHtml(entry.timestamp)}</td>
+          <td><strong>${escapeHtml(entry.hostname)}</strong></td>
+          <td class="metric ${heatClass(f.cpu_percent || 0, 50, 80)}">${(f.cpu_percent || 0).toFixed(1)}%</td>
+          <td class="metric ${heatClass(f.ram_percent || 0, 70, 90)}">${(f.ram_percent || 0).toFixed(1)}%</td>
+          <td>${f.usb_count || 0}</td>
+          <td><strong style="color: ${sColor}">${scoreVal}</strong></td>
+          <td class="name-cell" style="font-size: 0.82rem;">${procSummary}${moreCount ? `<span class="muted">${moreCount}</span>` : ''}</td>
+        </tr>`;
+
+        if (isExpanded && procs.length) {
+          row += `<tr class="detail-row"><td colspan="7">
+            <strong>Processes at time of anomaly</strong>
+            <div class="muted" style="margin-bottom: 8px;">These were the top CPU-consuming processes when the anomaly was detected.</div>
+            <table class="task-table" style="margin: 0; table-layout: auto;">
+              <thead><tr><th>PID</th><th>Name</th><th>CPU %</th><th>Memory %</th></tr></thead>
+              <tbody>${procs.map(p => `<tr>
+                <td>${escapeHtml(p.pid)}</td>
+                <td>${escapeHtml(p.name)}</td>
+                <td class="metric ${heatClass(p.cpu_percent, 5, 20)}">${(p.cpu_percent || 0).toFixed(1)}%</td>
+                <td class="metric ${heatClass(p.memory_percent, 1, 5)}">${(p.memory_percent || 0).toFixed(2)}%</td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </td></tr>`;
+        }
+        return row;
+      }).join('');
+    }
+
+    function toggleHistoryRow(idx) {
+      expandedHistoryIdx = expandedHistoryIdx === idx ? -1 : idx;
+      renderAnomalyHistory();
+    }
+
+    // Initial load + auto-refresh every 10s
+    refreshAnomalyHistory();
+    setInterval(refreshAnomalyHistory, 10000);
   </script>
 </body>
 </html>

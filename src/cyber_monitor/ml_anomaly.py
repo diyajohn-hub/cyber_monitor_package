@@ -4,6 +4,7 @@ import time
 import os
 import threading
 from collections import deque
+from datetime import datetime
 
 import numpy as np
 import psutil
@@ -100,6 +101,12 @@ _ml_state = {
 MIN_TRAINING_POINTS = 20   # ~100 seconds at 5-second intervals
 ROLLING_WINDOW = 200       # keep last 200 readings per host
 POLL_INTERVAL = 5          # seconds between readings
+HISTORY_FILE = "mnt/master/anomaly_history.json"
+HISTORY_BUFFER_SIZE = 500  # in-memory ring buffer size
+
+# Persistent anomaly history — append-only ring buffer
+_anomaly_history_lock = threading.Lock()
+_anomaly_history: deque = deque(maxlen=HISTORY_BUFFER_SIZE)
 
 
 def get_ml_state() -> dict:
@@ -112,6 +119,71 @@ def _set_ml_state(new_state: dict):
     """Thread-safe setter called by the background worker."""
     with _ml_state_lock:
         _ml_state.update(new_state)
+
+
+def get_anomaly_history(limit: int = 200) -> list[dict]:
+    """Thread-safe getter for the anomaly history buffer, called by Flask."""
+    with _anomaly_history_lock:
+        entries = list(_anomaly_history)
+    # Return most recent first, capped at limit
+    return list(reversed(entries[-limit:]))
+
+
+def _capture_top_processes(count: int = 10) -> list[dict]:
+    """Snapshot the top CPU-consuming processes right now."""
+    rows = []
+    for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+        try:
+            info = proc.info
+            rows.append({
+                'pid': info.get('pid'),
+                'name': info.get('name') or 'Unknown',
+                'cpu_percent': round(float(info.get('cpu_percent') or 0), 1),
+                'memory_percent': round(float(info.get('memory_percent') or 0), 2),
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    rows.sort(key=lambda r: r['cpu_percent'], reverse=True)
+    return rows[:count]
+
+
+def _append_to_history(entry: dict):
+    """Append an anomaly record to both the in-memory buffer and the
+    persistent JSON file.  The file is append-only so evidence is never
+    lost even after the model retrains."""
+    with _anomaly_history_lock:
+        _anomaly_history.append(entry)
+
+    # Persist to disk — read existing, append, write back
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as fh:
+                history = json.load(fh)
+            if not isinstance(history, list):
+                history = []
+        else:
+            history = []
+        history.append(entry)
+        with open(HISTORY_FILE, 'w', encoding='utf-8') as fh:
+            json.dump(history, fh, indent=2)
+    except Exception as exc:
+        print(f"[ML] Failed to persist anomaly history: {exc}")
+
+
+def _load_history_from_disk():
+    """Seed the in-memory buffer from the persistent file on startup."""
+    if not os.path.exists(HISTORY_FILE):
+        return
+    try:
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as fh:
+            history = json.load(fh)
+        if isinstance(history, list):
+            with _anomaly_history_lock:
+                for entry in history[-HISTORY_BUFFER_SIZE:]:
+                    _anomaly_history.append(entry)
+        print(f"[ML] Loaded {len(_anomaly_history)} anomaly history entries from disk")
+    except Exception as exc:
+        print(f"[ML] Could not load anomaly history: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +203,9 @@ def run_anomaly_monitor():
     log_file = "mnt/master/log.json"
     anomalies_file = "mnt/master/anomalies.json"
     os.makedirs("mnt/master", exist_ok=True)
+
+    # Seed in-memory history from any previous run
+    _load_history_from_disk()
 
     # Rolling buffers: hostname -> deque of [cpu, ram, usb]
     buffers: dict[str, deque] = {}
@@ -227,8 +302,8 @@ def run_anomaly_monitor():
                 }
 
                 if pred == -1:
-                    anomalies_detected.append({
-                        "timestamp": time.strftime("%H:%M:%S"),
+                    anomaly_entry = {
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "hostname": host,
                         "features": {
                             "cpu_percent": float(latest[0][0]),
@@ -236,7 +311,12 @@ def run_anomaly_monitor():
                             "usb_count": int(latest[0][2]),
                         },
                         "score": round(score, 4),
-                    })
+                        "top_processes": _capture_top_processes(10),
+                    }
+                    anomalies_detected.append(anomaly_entry)
+
+                    # Persist to the append-only history log
+                    _append_to_history(anomaly_entry)
 
             # ---- 4. Publish state --------------------------------------
             phase = "Active" if any(

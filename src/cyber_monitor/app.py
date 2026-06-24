@@ -16,7 +16,7 @@ from flask import Flask, jsonify, render_template, request
 
 from cyber_monitor import server as collector_server
 from cyber_monitor.network import default_cidr, discover_devices, primary_ip
-from cyber_monitor.ml_anomaly import run_anomaly_monitor, get_ml_state
+from cyber_monitor.ml_anomaly import run_anomaly_monitor, get_ml_state, get_anomaly_history
 import os
 
 CPU_HISTORY = deque([0] * 10, maxlen=10)
@@ -94,6 +94,14 @@ def create_app() -> Flask:
     @app.get("/api/security/ml_stats")
     def security_ml_stats():
         return jsonify(get_ml_state())
+
+    @app.get("/api/security/anomaly-history")
+    def security_anomaly_history():
+        try:
+            limit = int(request.args.get("limit") or 200)
+        except ValueError:
+            limit = 200
+        return jsonify(get_anomaly_history(max(1, min(limit, 500))))
 
     @app.get("/api/collector/logs")
     def collector_logs():

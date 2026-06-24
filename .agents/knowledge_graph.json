@@ -1,0 +1,34 @@
+{
+  "project": "cyber_monitor_package",
+  "updated": "2026-06-25T03:16:00+05:30",
+  "nodes": {
+    "files": {
+      "src/cyber_monitor/__init__.py": { "purpose": "Package init", "size": 89 },
+      "src/cyber_monitor/app.py": { "purpose": "Flask app with routes, telemetry, security, memory, service, and collector endpoints" },
+      "src/cyber_monitor/ml_anomaly.py": { "purpose": "ML anomaly detection with IsolationForest, process capture, persistent anomaly history logging" },
+      "src/cyber_monitor/network.py": { "purpose": "LAN device discovery, ping sweep, port scanning" },
+      "src/cyber_monitor/server.py": { "purpose": "Collector server for receiving remote telemetry and Windows logs" },
+      "src/cyber_monitor/snmp.py": { "purpose": "SNMP device querying" },
+      "src/cyber_monitor/templates/security.html": { "purpose": "Security view: processes, services, ML stats, anomaly history tab" },
+      "mnt/master/anomaly_history.json": { "purpose": "PERSISTENT append-only anomaly history with process snapshots" }
+    },
+    "functions_added_2026_06_25": {
+      "ml_anomaly.get_anomaly_history": "Thread-safe getter for persistent anomaly history buffer",
+      "ml_anomaly._capture_top_processes": "Snapshot top N CPU processes at anomaly detection time",
+      "ml_anomaly._append_to_history": "Append anomaly to in-memory buffer and persistent JSON file",
+      "ml_anomaly._load_history_from_disk": "Seed in-memory buffer from anomaly_history.json on startup",
+      "app.security_anomaly_history": "GET /api/security/anomaly-history endpoint"
+    },
+    "api_routes": {
+      "/api/security/anomaly-history": "Persistent anomaly history with process snapshots (new 2026-06-25)"
+    }
+  },
+  "recent_changes": [
+    {
+      "date": "2026-06-25",
+      "description": "Added persistent anomaly process logging system",
+      "files_modified": ["ml_anomaly.py", "app.py", "security.html"],
+      "files_created": ["mnt/master/anomaly_history.json"]
+    }
+  ]
+}
