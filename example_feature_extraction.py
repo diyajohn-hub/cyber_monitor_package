@@ -37,10 +37,41 @@ def run_example():
     
     for host, vector_matrix in host_vectors.items():
         print(f"\nHost: {host}")
-        print(f"Matrix shape: {vector_matrix.shape} (Rows=Timeframes, Columns=Features)")
-        print(f"Features [CPU%, RAM%, USB]:")
         print(vector_matrix)
         
+    # --- STEP 2 & 3: Initialize and Train ---
+    print("\n" + "="*50 + "\n")
+    print("4. Step 2 & 3: Model Initialization and Baseline Training...")
+    
+    from src.cyber_monitor.ml_anomaly import AnomalyDetector
+    
+    # Let's train the model on the LAPTOP-X9 normal baseline data
+    laptop_baseline = host_vectors["LAPTOP-X9"]
+    detector = AnomalyDetector(contamination=0.1) # Expecting ~10% anomalies max
+    detector.train_baseline(laptop_baseline)
+    print("Model successfully trained on LAPTOP-X9 baseline!\n")
+    
+    # --- STEP 4: Inference (Simulating an attack) ---
+    print("5. Step 4: Real-time Inference (Testing the model with new data)")
+    
+    # Simulate some live data: one normal reading, one massive CPU spike (Anomaly!)
+    # Format: [CPU%, RAM%, USB Count]
+    live_test_data = np.array([
+        [90.0, 91.5, 0],   # Normal (similar to baseline 88-92% CPU)
+        [100.0, 99.9, 5]   # MASSIVE ANOMALY (100% CPU, high RAM, 5 USBs plugged in)
+    ])
+    
+    predictions = detector.predict(live_test_data)
+    
+    print("Live Test Data:")
+    print(live_test_data)
+    print("\nModel Predictions (1 = Normal, -1 = ANOMALY):")
+    print(predictions)
+    
+    for i, pred in enumerate(predictions):
+        status = "NORMAL" if pred == 1 else "🚨 ANOMALY DETECTED 🚨"
+        print(f"Reading {i+1}: {status}")
+
     # Cleanup
     os.remove(temp_file)
 
