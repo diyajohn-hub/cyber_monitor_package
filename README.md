@@ -82,3 +82,10 @@ pyinstaller app.spec
 ```
 
 Generated `build/`, `dist/`, and cache folders are intentionally ignored and can be recreated.
+
+## Upcoming Changes
+
+1. New Process
+2. Windows registry adding or deleting
+3. Network new connection or using of the internet excessively
+4. Register IP that is connected in the network and check them in VirusTotal
