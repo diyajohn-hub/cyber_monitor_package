@@ -6,9 +6,7 @@ __pycache__/
 .venv/
 venv/
 
-
-mnt/hosts/
-mnt/master/log.json
-mnt/*.json
-mnt/hosts/*.json
-mnt/master/*.json
+# Runtime data & logs (generated at runtime, never commit)
+mnt/
+*.log
+.agents/
