@@ -1,91 +1,114 @@
 # Cyber Monitor
 
-A small Flask dashboard for local system telemetry, host system events, and network device discovery.
+A robust, real-time Flask dashboard designed for local system telemetry, host system event tracking, and advanced network threat intelligence. Tailored specifically for modern cyber cell monitoring environments.
 
-## Project layout
+## Overview
+
+Cyber Monitor provides a suite of advanced tools designed to monitor hosts and networks, featuring live Machine Learning anomaly detection, Graph Neural Network (GNN) topology modeling, Windows Registry monitoring, and VirusTotal integration.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Python 3.9+** (Ensure `python.exe` is added to PATH on Windows).
+- **Windows OS** is recommended for full functionality (Registry monitoring, Windows Event Viewer integration, and OS Service tracking).
+
+### Installation & Setup
+
+1. **Clone the repository and install dependencies:**
+   ```powershell
+   pip install -r requirements.txt
+   ```
+
+2. **Configure Environment Variables (Optional but recommended):**
+   To enable VirusTotal IP Threat Intelligence, set your free API key:
+   ```powershell
+   $env:VIRUSTOTAL_API_KEY = "your_api_key_here"
+   ```
+
+3. **Start the Application:**
+   Set the Python path and run the main module:
+   ```powershell
+   $env:PYTHONPATH = "src"
+   python -m cyber_monitor.app
+   ```
+   
+   *Alternatively, use the provided batch script:*
+   ```powershell
+   .\run_monitor.bat
+   ```
+
+4. **Access the Dashboard:**
+   Open your browser and navigate to: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+
+---
+
+## ✨ Key Features
+
+### 🛡️ ML Anomaly Detection & GNN Modeling
+- **Isolation Forest Algorithm:** Unsupervised machine learning continuously monitors CPU, RAM, and USB activity for anomalous behavior, automatically adapting to shifting baselines.
+- **PyTorch Geometric (PyG) GNN Topology:** A live Graph Neural Network autoencoder models your local network traffic. Anomalous connections (e.g., massive unexpected data transfers) instantly flash red on the interactive dashboard.
+- **Persistent Evidence Logging:** When an anomaly is detected, the system snapshots the top CPU-consuming processes and logs the event to a persistent, append-only JSON file (`mnt/master/anomaly_history.json`).
+
+### 📂 Windows Registry Monitor
+- **Real-Time Tracking:** A background daemon watches high-value registry keys (e.g., `Run`, `RunOnce`, `Services`, `Winlogon`) typically targeted by malware for persistence.
+- **Change Detection:** Instantly detects additions, deletions, and value modifications, throwing an alert and logging the exact key path and value change.
+
+### 🌐 VirusTotal IP Intelligence
+- **Automated Threat Scanning:** Automatically extracts public IPs from active network connections and queries them against the VirusTotal API v3.
+- **Smart Rate-Limiting & Caching:** Respects VT's free tier limits (4 requests/minute) by queuing IPs and caching results to disk to prevent redundant lookups.
+- **Manual Checks:** Enter any IP manually in the UI to instantly pull its threat verdict, AS owner, and country of origin.
+
+### 🔌 Live System & Network Telemetry
+- **Local Monitoring (`/`):** Live CPU, RAM, and USB/removable storage connections.
+- **Network Discovery (`/network`):** Scans a local IPv4 CIDR range using parallel ping sweeps and ARP cache warming to identify devices, reverse-DNS names, and common open TCP ports.
+- **Security View (`/security`):** A consolidated dashboard showing live local processes, OS services grouped by category, ML stats, the live GNN graph, the Registry monitor, and VT Intelligence.
+- **Windows Logs (`/logs`):** Consolidates local and client Windows Event Viewer logs (Application, Security, Setup, System).
+
+---
+
+## 🏗️ Project Architecture
 
 ```text
-src/cyber_monitor/          Application package
-src/cyber_monitor/app.py    Flask app and telemetry endpoints
-src/cyber_monitor/network.py LAN discovery and common-port scanning
-src/cyber_monitor/templates Local and network dashboard templates
-run_monitor.bat             Windows launcher
-app.spec                    PyInstaller build specification
-requirements.txt            Python dependencies
+cyber_monitor_package/
+├── src/cyber_monitor/
+│   ├── app.py                   # Main Flask server and API routes
+│   ├── ml_anomaly.py            # ML Isolation Forest & PyG GNN models
+│   ├── registry_monitor.py      # Windows Registry change detection daemon
+│   ├── virustotal_checker.py    # VirusTotal IP reputation checking daemon
+│   ├── network.py               # LAN discovery and connection scanning
+│   ├── snmp.py                  # SNMP device querying
+│   ├── server.py                # Telemetry collector server
+│   └── templates/               # Dashboard HTML templates
+├── mnt/master/                  # Persistent logs and ML checkpoints
+├── run_monitor.bat              # Windows launcher script
+├── app.spec                     # PyInstaller build specification
+└── requirements.txt             # Python dependencies
 ```
 
-## Run locally
+## 🔌 API Endpoints Reference
 
-Install Python first if `python --version` or `py --version` does not work in PowerShell.
-On Windows, install it from https://www.python.org/downloads/ and tick **Add python.exe to PATH**.
+The dashboard is powered by these live internal APIs:
 
-```powershell
-pip install -r requirements.txt
-$env:PYTHONPATH = "src"
-python -m cyber_monitor.app
-```
+- **Telemetry & Services:**
+  - `/api/local` — Local CPU/RAM/USB telemetry.
+  - `/api/os/services` — Live OS service status and categories.
+- **Security & ML:**
+  - `/api/security/anomalies` — Active anomalies in the current cycle.
+  - `/api/security/anomaly-history` — Full persistent history of detected anomalies.
+  - `/api/security/network_graph` — Live GNN topology graph data.
+  - `/api/security/registry` — Current state of monitored registry keys.
+  - `/api/security/virustotal` — Cached VirusTotal results.
+- **Network & Logs:**
+  - `/api/network/scan` — Discovers reachable devices in the IPv4 range.
+  - `/api/system/logs` — Recent Windows Event Viewer logs.
 
-This starts both services in one command:
+## 📦 Building an Executable
 
-- Dashboard: http://127.0.0.1:8000
-- Collector socket: `0.0.0.0:5000` by default, or the next free port if `5000` is already busy
-
-Agent metrics sent to the collector are stored in `mnt/master/log.json` and per-host files under `mnt/hosts/`. The dashboard shows the latest collector entries and the active collector port on the home page.
-
-You can also run:
-
-```powershell
-.\run_monitor.bat
-```
-
-## Pages
-
-- `/` shows CPU usage, RAM usage, and USB/removable storage connections for this device.
-- `/network` scans a local IPv4 CIDR range and lists devices found through ping and ARP, with reverse-DNS names and common open TCP ports.
-- `/logs` separates local and client Windows Event Viewer logs, with Application, Security, Setup, System, and Forwarded Events shown for each source.
-- `/security` shows live local processes, memory usage, and OS services.
-
-## ML Anomaly Detection
-
-Cyber Monitor includes an unsupervised Machine Learning engine that continuously monitors system telemetry (CPU, RAM, USB activity) for anomalous behavior.
-
-### How It Works
-- **Isolation Forest Algorithm**: The system uses `scikit-learn`'s Isolation Forest model, which is highly effective at identifying outliers in multi-dimensional telemetry data without requiring pre-labeled training data.
-- **Continuous Baseline Training**: The detector operates on a rolling window (e.g., the last 200 readings per host). It requires a minimum number of data points (e.g., 20 readings, or ~100 seconds) before it becomes "Active".
-- **Online-ish Learning**: Every cycle (every 5 seconds), the model retrains on the latest rolling window. This allows it to slowly adapt to sustained changes in system behavior (e.g., a heavy workload starting up).
-- **Per-Host Models**: A separate Isolation Forest is maintained for the local host as well as each remote client pushing data to the collector. 
-
-### Model Behavior and Logging
-Because the model continuously retrains, a sudden spike (like a runaway process consuming high CPU) will initially be flagged as an **Anomaly**. However, if that high CPU usage persists, the model's baseline will shift, and it will eventually start treating the new state as **Normal**.
-
-To ensure security teams don't lose evidence of these transient anomalies:
-1. **Process Snapshotting**: The exact moment an anomaly triggers, the ML engine captures a snapshot of the top 10 CPU-consuming processes.
-2. **Persistent Append-Only Log**: The anomaly record (timestamp, telemetry features, anomaly score, and process snapshot) is written to an append-only JSON file (`mnt/master/anomaly_history.json`).
-3. **Anomaly History View**: The dashboard's Security View includes an "Anomaly History" tab that displays this permanent record. Since it is append-only, the evidence remains available even after the ML model adapts to the anomaly and classifies it as normal.
-
-## Local live APIs
-
-- `/api/local` returns local CPU, RAM, and USB telemetry.
-- `/api/memory/live` returns current RAM/swap usage, process count, and the highest-memory processes.
-- `/api/os/services` returns live OS service status, service categories, and running/stopped summary counts.
-- `/api/security/local` combines OS, memory, service, and alert data for the Security View.
-- `/api/network/scan` discovers reachable devices in a local IPv4 range.
-- `/api/system/logs` returns recent events grouped by the five standard Windows Event Viewer logs.
-- `/api/collector/windows-logs` reads the collector log file on demand and returns deduplicated Windows events received from each client system.
-
-The network page warms the ARP cache with a parallel ping sweep, includes devices from the ARP table, and checks a small set of common TCP ports.
-
-## Build executable
-
+To compile the application into a standalone Windows executable:
 ```powershell
 pyinstaller app.spec
 ```
-
-Generated `build/`, `dist/`, and cache folders are intentionally ignored and can be recreated.
-
-## Upcoming Changes
-
-1. New Process
-2. Windows registry adding or deleting
-3. Network new connection or using of the internet excessively
-4. Register IP that is connected in the network and check them in VirusTotal
+The output will be placed in the `dist/` directory. Generated build and cache folders are ignored by git.
