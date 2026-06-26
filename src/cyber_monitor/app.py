@@ -17,6 +17,8 @@ from flask import Flask, jsonify, render_template, request, send_file
 from cyber_monitor import server as collector_server
 from cyber_monitor.network import default_cidr, discover_devices, primary_ip, get_default_gateway
 from cyber_monitor.ml_anomaly import run_anomaly_monitor, get_ml_state, get_anomaly_history, reset_network_graph
+from cyber_monitor.registry_monitor import run_registry_monitor, get_registry_state, get_registry_history, REGISTRY_HISTORY_FILE
+from cyber_monitor.virustotal_checker import run_virustotal_checker, get_vt_state, get_vt_results, manual_check_ip, VT_RESULTS_FILE
 import os
 
 CPU_HISTORY = deque([0] * 10, maxlen=10)
@@ -25,6 +27,8 @@ SERVICE_STATUS_HISTORY = deque([0] * 10, maxlen=10)
 PROCESS_IO_HISTORY: dict[int, tuple[float, int]] = {}
 COLLECTOR_THREAD: threading.Thread | None = None
 ML_THREAD: threading.Thread | None = None
+REGISTRY_THREAD: threading.Thread | None = None
+VT_THREAD: threading.Thread | None = None
 
 
 def template_dir() -> str:
@@ -36,10 +40,18 @@ def template_dir() -> str:
 def create_app() -> Flask:
     app = Flask(__name__, template_folder=template_dir())
 
-    global ML_THREAD
+    global ML_THREAD, REGISTRY_THREAD, VT_THREAD
     if ML_THREAD is None:
         ML_THREAD = threading.Thread(target=run_anomaly_monitor, daemon=True)
         ML_THREAD.start()
+
+    if REGISTRY_THREAD is None:
+        REGISTRY_THREAD = threading.Thread(target=run_registry_monitor, daemon=True)
+        REGISTRY_THREAD.start()
+
+    if VT_THREAD is None:
+        VT_THREAD = threading.Thread(target=run_virustotal_checker, daemon=True)
+        VT_THREAD.start()
 
     @app.after_request
     def disable_api_cache(response):
@@ -119,6 +131,51 @@ def create_app() -> Flask:
     def reset_security_network_graph():
         reset_network_graph()
         return jsonify({"status": "resetting"})
+
+    # --- Registry Monitor routes ---
+
+    @app.get("/api/security/registry")
+    def security_registry():
+        return jsonify(get_registry_state())
+
+    @app.get("/api/security/registry-history")
+    def security_registry_history():
+        try:
+            limit = int(request.args.get("limit") or 200)
+        except ValueError:
+            limit = 200
+        return jsonify(get_registry_history(max(1, min(limit, 500))))
+
+    @app.get("/api/security/download-registry-log")
+    def download_registry_log():
+        if os.path.exists(REGISTRY_HISTORY_FILE):
+            return send_file(REGISTRY_HISTORY_FILE, as_attachment=True, download_name="registry_changes.json")
+        return jsonify({"error": "Registry log file not found"}), 404
+
+    # --- VirusTotal routes ---
+
+    @app.get("/api/security/virustotal")
+    def security_virustotal():
+        state = get_vt_state()
+        state["results"] = get_vt_results()
+        return jsonify(state)
+
+    @app.post("/api/security/virustotal/check")
+    def security_virustotal_check():
+        body = request.get_json(silent=True) or {}
+        ip = str(body.get("ip", "")).strip()
+        if not ip:
+            return jsonify({"error": "Missing 'ip' field"}), 400
+        result = manual_check_ip(ip)
+        if result is None:
+            return jsonify({"error": "Check failed — API key missing or rate limited"}), 503
+        return jsonify(result)
+
+    @app.get("/api/security/download-vt-log")
+    def download_vt_log():
+        if os.path.exists(VT_RESULTS_FILE):
+            return send_file(VT_RESULTS_FILE, as_attachment=True, download_name="virustotal_results.json")
+        return jsonify({"error": "VirusTotal log file not found"}), 404
 
     @app.get("/api/collector/logs")
     def collector_logs():

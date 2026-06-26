@@ -406,6 +406,8 @@
       <button class="tab" id="networkTab" onclick="showTab('network')">SNMP Network Devices</button>
       <button class="tab" id="mlTab" onclick="showTab('ml')">ML Engine Stats</button>
       <button class="tab" id="gnnTab" onclick="showTab('gnn')">Network GNN Graph</button>
+      <button class="tab" id="registryTab" onclick="showTab('registry')">Registry Monitor</button>
+      <button class="tab" id="vtTab" onclick="showTab('vt')">VirusTotal Intel</button>
       <button class="tab" id="historyTab" onclick="showTab('history')">Anomaly History</button>
     </div>
 
@@ -456,6 +458,81 @@
           </div>
         </div>
         <div id="network-graph-container"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="registryPanel">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Registry Monitor</h2>
+            <div class="muted">Real-time Windows Registry change detection on security-critical keys.</div>
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div id="registryStatus" class="muted">Waiting for data...</div>
+            <button class="primary" onclick="refreshRegistry()">Refresh</button>
+            <button class="primary" onclick="window.location.href='/api/security/download-registry-log'">Download Log</button>
+          </div>
+        </div>
+        <div id="registryMonitoredKeys" class="muted" style="margin-bottom: 12px; font-size: 0.85rem;"></div>
+        <div class="table-wrap" style="max-height: 620px;">
+          <table class="task-table" aria-label="Registry changes">
+            <thead>
+              <tr>
+                <th style="width: 18%;">Timestamp</th>
+                <th style="width: 10%;">Action</th>
+                <th style="width: 30%;">Key Path</th>
+                <th style="width: 14%;">Value Name</th>
+                <th style="width: 14%;">Old Value</th>
+                <th style="width: 14%;">New Value</th>
+              </tr>
+            </thead>
+            <tbody id="registryTableBody">
+              <tr><td colspan="6" style="text-align: center;" class="muted">No registry changes detected yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="vtPanel">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>VirusTotal IP Intelligence</h2>
+            <div class="muted">Automated threat reputation checks for public IPs in your network graph.</div>
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div id="vtStatus" class="muted">Waiting for data...</div>
+            <button class="primary" onclick="refreshVT()">Refresh</button>
+            <button class="primary" onclick="window.location.href='/api/security/download-vt-log'">Download Log</button>
+          </div>
+        </div>
+        <div class="controls">
+          <input id="vtManualIP" placeholder="Enter IP to check manually" style="max-width: 240px;">
+          <button class="primary" onclick="manualVTCheck()">Check IP</button>
+          <div id="vtManualResult" class="muted" style="font-size: 0.85rem;"></div>
+        </div>
+        <div id="vtSummary" class="summary" style="margin-bottom: 12px;"></div>
+        <div class="table-wrap" style="max-height: 620px;">
+          <table class="task-table" aria-label="VirusTotal results">
+            <thead>
+              <tr>
+                <th style="width: 16%;">IP Address</th>
+                <th style="width: 10%;">Verdict</th>
+                <th style="width: 10%;">Malicious</th>
+                <th style="width: 10%;">Suspicious</th>
+                <th style="width: 10%;">Engines</th>
+                <th style="width: 14%;">AS Owner</th>
+                <th style="width: 10%;">Country</th>
+                <th style="width: 20%;">Checked At</th>
+              </tr>
+            </thead>
+            <tbody id="vtTableBody">
+              <tr><td colspan="8" style="text-align: center;" class="muted">No VirusTotal results yet. Set VIRUSTOTAL_API_KEY env var to enable.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -654,14 +731,20 @@
       document.getElementById("networkPanel").classList.toggle("active", name === "network");
       document.getElementById("mlPanel").classList.toggle("active", name === "ml");
       document.getElementById("gnnPanel").classList.toggle("active", name === "gnn");
+      document.getElementById("registryPanel").classList.toggle("active", name === "registry");
+      document.getElementById("vtPanel").classList.toggle("active", name === "vt");
       document.getElementById("historyPanel").classList.toggle("active", name === "history");
       document.getElementById("localTab").classList.toggle("active", name === "local");
       document.getElementById("networkTab").classList.toggle("active", name === "network");
       document.getElementById("mlTab").classList.toggle("active", name === "ml");
       document.getElementById("gnnTab").classList.toggle("active", name === "gnn");
+      document.getElementById("registryTab").classList.toggle("active", name === "registry");
+      document.getElementById("vtTab").classList.toggle("active", name === "vt");
       document.getElementById("historyTab").classList.toggle("active", name === "history");
       if (name === 'history') refreshAnomalyHistory();
       if (name === 'gnn') fetchGNNGraph();
+      if (name === 'registry') refreshRegistry();
+      if (name === 'vt') refreshVT();
     }
 
     function processHead(cpu, memory, disk, network) {
@@ -998,6 +1081,14 @@
              alertText = `<strong>Host:</strong> ${escapeHtml(latest.hostname)} <br> 
                           <strong>Time:</strong> ${escapeHtml(latest.timestamp)} <br>
                           <strong>Network Anomaly:</strong> ${escapeHtml(latest.connection.local_ip)} &lt;-&gt; ${escapeHtml(latest.connection.remote_ip)}`;
+          } else if (latest.type === "registry") {
+             alertText = `<strong>Host:</strong> ${escapeHtml(latest.hostname)} <br>
+                          <strong>Time:</strong> ${escapeHtml(latest.timestamp)} <br>
+                          <strong>Registry ${escapeHtml(latest.action)}:</strong> ${escapeHtml(latest.key_path)} \\ ${escapeHtml(latest.value_name)}`;
+          } else if (latest.type === "virustotal") {
+             alertText = `<strong>Host:</strong> ${escapeHtml(latest.hostname)} <br>
+                          <strong>Time:</strong> ${escapeHtml(latest.timestamp)} <br>
+                          <strong>VirusTotal Threat:</strong> ${escapeHtml(latest.ip)} — ${escapeHtml(latest.verdict)} (${latest.malicious_count}/${latest.total_engines} engines)`;
           } else {
              const f = latest.features || {};
              alertText = `<strong>Host:</strong> ${escapeHtml(latest.hostname)} <br> 
@@ -1390,6 +1481,10 @@
             procSummary = `<strong>New Node:</strong> ${escapeHtml(entry.node_ip)}`;
         } else if (entry.type === "network") {
             procSummary = `<strong>Network:</strong> ${escapeHtml(entry.connection.local_ip)} &lt;-&gt; ${escapeHtml(entry.connection.remote_ip)}`;
+        } else if (entry.type === "registry") {
+            procSummary = `<strong>Registry ${escapeHtml(entry.action || '')}:</strong> ${escapeHtml(entry.value_name || '')}`;
+        } else if (entry.type === "virustotal") {
+            procSummary = `<strong>VT ${escapeHtml(entry.verdict || '')}:</strong> ${escapeHtml(entry.ip || '')} (${entry.malicious_count || 0}/${entry.total_engines || 0})`;
         } else {
             procSummary = procs.slice(0, 3).map(p =>
                 `${escapeHtml(p.name)} (${p.cpu_percent}%)`
@@ -1434,6 +1529,132 @@
     // Initial load + auto-refresh every 10s
     refreshAnomalyHistory();
     setInterval(refreshAnomalyHistory, 10000);
+
+    // --- Registry Monitor Polling ---
+    let registryHistoryData = [];
+
+    async function refreshRegistry() {
+      try {
+        const [stateRes, historyRes] = await Promise.all([
+          fetch('/api/security/registry'),
+          fetch('/api/security/registry-history?limit=500')
+        ]);
+        if (stateRes.ok) {
+          const state = await stateRes.json();
+          document.getElementById('registryStatus').textContent =
+            `Status: ${state.status} | Last scan: ${state.snapshot_time || 'N/A'}`;
+          const keys = state.monitored_keys || [];
+          document.getElementById('registryMonitoredKeys').innerHTML =
+            keys.length ? `<strong>Monitoring:</strong> ${keys.map(k => escapeHtml(k)).join(', ')}` : '';
+        }
+        if (historyRes.ok) {
+          registryHistoryData = await historyRes.json();
+          renderRegistryHistory();
+        }
+      } catch (e) {
+        console.error('Failed to fetch registry data:', e);
+      }
+    }
+
+    function renderRegistryHistory() {
+      const tbody = document.getElementById('registryTableBody');
+      if (!registryHistoryData.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;" class="muted">No registry changes detected yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = registryHistoryData.map(entry => {
+        const actionColor = entry.action === 'ADDED' ? 'var(--green)'
+          : entry.action === 'DELETED' ? 'var(--red)' : 'var(--orange)';
+        return `<tr>
+          <td>${escapeHtml(entry.timestamp || '')}</td>
+          <td><strong style="color: ${actionColor}">${escapeHtml(entry.action || '')}</strong></td>
+          <td class="name-cell" title="${escapeHtml(entry.key_path || '')}" style="font-size: 0.82rem;">${escapeHtml(entry.key_path || '')}</td>
+          <td style="font-size: 0.82rem;">${escapeHtml(entry.value_name || '')}</td>
+          <td class="muted" style="font-size: 0.82rem;">${entry.old_value != null ? escapeHtml(String(entry.old_value)) : '<em>—</em>'}</td>
+          <td style="font-size: 0.82rem;">${entry.new_value != null ? escapeHtml(String(entry.new_value)) : '<em>—</em>'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    refreshRegistry();
+    setInterval(refreshRegistry, 10000);
+
+    // --- VirusTotal Polling ---
+    let vtResultsData = [];
+
+    async function refreshVT() {
+      try {
+        const res = await fetch('/api/security/virustotal');
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('vtStatus').textContent =
+          `Status: ${data.status || 'Unknown'} | API Key: ${data.api_key_set ? 'Set' : 'Not set'} | Checked: ${data.checked_count || 0} | Last: ${data.last_check_time || 'N/A'}`;
+        vtResultsData = data.results || [];
+        const malCount = vtResultsData.filter(r => r.verdict === 'Malicious').length;
+        const susCount = vtResultsData.filter(r => r.verdict === 'Suspicious').length;
+        document.getElementById('vtSummary').innerHTML = vtResultsData.length
+          ? `<div class="card"><strong>${vtResultsData.length}</strong> IPs checked</div>` +
+            `<div class="card" style="border-color: ${malCount ? 'var(--red)' : 'var(--green)'};"><strong>${malCount}</strong> Malicious</div>` +
+            `<div class="card" style="border-color: ${susCount ? 'var(--orange)' : 'var(--green)'};"><strong>${susCount}</strong> Suspicious</div>`
+          : '';
+        renderVTResults();
+      } catch (e) {
+        console.error('Failed to fetch VT data:', e);
+      }
+    }
+
+    function renderVTResults() {
+      const tbody = document.getElementById('vtTableBody');
+      if (!vtResultsData.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;" class="muted">No VirusTotal results yet.</td></tr>';
+        return;
+      }
+      // Sort: malicious first, then suspicious, then clean
+      const order = { 'Malicious': 0, 'Suspicious': 1, 'Unrated': 2, 'Clean': 3 };
+      const sorted = [...vtResultsData].sort((a, b) => (order[a.verdict] ?? 9) - (order[b.verdict] ?? 9));
+      tbody.innerHTML = sorted.map(r => {
+        const vColor = r.verdict === 'Malicious' ? 'var(--red)'
+          : r.verdict === 'Suspicious' ? 'var(--orange)'
+          : r.verdict === 'Clean' ? 'var(--green)' : 'var(--text)';
+        return `<tr>
+          <td><strong>${escapeHtml(r.ip)}</strong></td>
+          <td><strong style="color: ${vColor}">${escapeHtml(r.verdict)}</strong></td>
+          <td class="metric ${r.malicious > 0 ? 'hot' : ''}">${r.malicious}</td>
+          <td class="metric ${r.suspicious > 0 ? 'medium' : ''}">${r.suspicious}</td>
+          <td>${r.total_engines}</td>
+          <td class="name-cell" style="font-size: 0.82rem;">${escapeHtml(r.as_owner || '')}</td>
+          <td>${escapeHtml(r.country || '')}</td>
+          <td class="muted" style="font-size: 0.82rem;">${escapeHtml(r.checked_at || '')}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function manualVTCheck() {
+      const input = document.getElementById('vtManualIP');
+      const resultDiv = document.getElementById('vtManualResult');
+      const ip = input.value.trim();
+      if (!ip) { resultDiv.textContent = 'Enter an IP address.'; return; }
+      resultDiv.textContent = 'Checking...';
+      try {
+        const res = await fetch('/api/security/virustotal/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          resultDiv.innerHTML = `<strong style="color: ${data.verdict === 'Malicious' ? 'var(--red)' : data.verdict === 'Suspicious' ? 'var(--orange)' : 'var(--green)'}">${escapeHtml(data.verdict)}</strong> — ${data.malicious}/${data.total_engines} engines flagged | ${escapeHtml(data.as_owner)} (${escapeHtml(data.country)})`;
+          refreshVT();
+        } else {
+          resultDiv.textContent = data.error || 'Check failed.';
+        }
+      } catch (e) {
+        resultDiv.textContent = 'Network error.';
+      }
+    }
+
+    refreshVT();
+    setInterval(refreshVT, 15000);
   </script>
 </body>
 </html>
