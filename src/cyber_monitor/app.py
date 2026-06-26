@@ -12,11 +12,11 @@ from datetime import datetime
 from pathlib import Path
 
 import psutil
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 
 from cyber_monitor import server as collector_server
-from cyber_monitor.network import default_cidr, discover_devices, primary_ip
-from cyber_monitor.ml_anomaly import run_anomaly_monitor, get_ml_state, get_anomaly_history
+from cyber_monitor.network import default_cidr, discover_devices, primary_ip, get_default_gateway
+from cyber_monitor.ml_anomaly import run_anomaly_monitor, get_ml_state, get_anomaly_history, reset_network_graph
 import os
 
 CPU_HISTORY = deque([0] * 10, maxlen=10)
@@ -103,6 +103,23 @@ def create_app() -> Flask:
             limit = 200
         return jsonify(get_anomaly_history(max(1, min(limit, 500))))
 
+    @app.get("/api/security/download-log")
+    def download_security_log():
+        from cyber_monitor.ml_anomaly import HISTORY_FILE
+        if os.path.exists(HISTORY_FILE):
+            return send_file(HISTORY_FILE, as_attachment=True, download_name="anomaly_history.json")
+        return jsonify({"error": "Log file not found"}), 404
+
+    @app.get("/api/security/network_graph")
+    def security_network_graph():
+        state = get_ml_state()
+        return jsonify(state.get("network_graph", {"nodes": [], "edges": []}))
+
+    @app.post("/api/security/network_graph/reset")
+    def reset_security_network_graph():
+        reset_network_graph()
+        return jsonify({"status": "resetting"})
+
     @app.get("/api/collector/logs")
     def collector_logs():
         try:
@@ -152,7 +169,8 @@ def create_app() -> Flask:
             targets = discover_devices(cidr)
         except ValueError as error:
             return jsonify({"error": str(error)}), 400
-        return jsonify({"cidr": cidr, "targets": targets})
+        gateway_ip = get_default_gateway()
+        return jsonify({"cidr": cidr, "targets": targets, "gateway_ip": gateway_ip})
 
     @app.get("/api/system/logs")
     def system_logs():

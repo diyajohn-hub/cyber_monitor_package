@@ -369,7 +369,16 @@
         min-width: 760px;
       }
     }
+    
+    #network-graph-container {
+      width: 100%;
+      height: 600px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
   </style>
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 </head>
 <body>
   <main class="shell">
@@ -396,6 +405,7 @@
       <button class="tab active" id="localTab" onclick="showTab('local')">This Device</button>
       <button class="tab" id="networkTab" onclick="showTab('network')">SNMP Network Devices</button>
       <button class="tab" id="mlTab" onclick="showTab('ml')">ML Engine Stats</button>
+      <button class="tab" id="gnnTab" onclick="showTab('gnn')">Network GNN Graph</button>
       <button class="tab" id="historyTab" onclick="showTab('history')">Anomaly History</button>
     </div>
 
@@ -433,6 +443,22 @@
       </div>
     </section>
 
+    <section class="tab-panel" id="gnnPanel">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Network Topology GNN</h2>
+            <div class="muted">Live visualization of local network connections. Anomalous connections flash red.</div>
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div id="gnnTimestamp" class="muted">Waiting for GNN data...</div>
+            <button class="primary" onclick="resetNetworkGraph()" style="padding: 4px 10px; font-size: 0.8rem;">Refresh Topology</button>
+          </div>
+        </div>
+        <div id="network-graph-container"></div>
+      </div>
+    </section>
+
     <section class="tab-panel" id="historyPanel">
       <div class="summary" id="historySummary"></div>
       <div class="panel">
@@ -449,6 +475,7 @@
             <option value="all">All hosts</option>
           </select>
           <button class="primary" onclick="refreshAnomalyHistory()">Refresh</button>
+          <button class="primary" onclick="window.location.href='/api/security/download-log'">Download Log</button>
         </div>
         <div class="table-wrap" style="max-height: 620px;">
           <table class="task-table" aria-label="Anomaly history">
@@ -626,12 +653,15 @@
       document.getElementById("localPanel").classList.toggle("active", name === "local");
       document.getElementById("networkPanel").classList.toggle("active", name === "network");
       document.getElementById("mlPanel").classList.toggle("active", name === "ml");
+      document.getElementById("gnnPanel").classList.toggle("active", name === "gnn");
       document.getElementById("historyPanel").classList.toggle("active", name === "history");
       document.getElementById("localTab").classList.toggle("active", name === "local");
       document.getElementById("networkTab").classList.toggle("active", name === "network");
       document.getElementById("mlTab").classList.toggle("active", name === "ml");
+      document.getElementById("gnnTab").classList.toggle("active", name === "gnn");
       document.getElementById("historyTab").classList.toggle("active", name === "history");
       if (name === 'history') refreshAnomalyHistory();
+      if (name === 'gnn') fetchGNNGraph();
     }
 
     function processHead(cpu, memory, disk, network) {
@@ -959,9 +989,22 @@
           banner.style.display = 'block';
           // Show the latest anomaly
           const latest = anomalies[anomalies.length - 1];
-          content.innerHTML = `<strong>Host:</strong> ${latest.hostname} <br> 
-                               <strong>Time:</strong> ${latest.timestamp} <br>
-                               <strong>CPU:</strong> ${latest.features.cpu_percent}% | <strong>RAM:</strong> ${latest.features.ram_percent}% | <strong>USB Count:</strong> ${latest.features.usb_count}`;
+          let alertText = "";
+          if (latest.type === "new_node") {
+             alertText = `<strong>Host:</strong> ${escapeHtml(latest.hostname)} <br>
+                          <strong>Time:</strong> ${escapeHtml(latest.timestamp)} <br>
+                          <strong>New Network Node Detected:</strong> ${escapeHtml(latest.node_ip)}`;
+          } else if (latest.type === "network") {
+             alertText = `<strong>Host:</strong> ${escapeHtml(latest.hostname)} <br> 
+                          <strong>Time:</strong> ${escapeHtml(latest.timestamp)} <br>
+                          <strong>Network Anomaly:</strong> ${escapeHtml(latest.connection.local_ip)} &lt;-&gt; ${escapeHtml(latest.connection.remote_ip)}`;
+          } else {
+             const f = latest.features || {};
+             alertText = `<strong>Host:</strong> ${escapeHtml(latest.hostname)} <br> 
+                                 <strong>Time:</strong> ${escapeHtml(latest.timestamp)} <br>
+                                 <strong>CPU:</strong> ${f.cpu_percent || 0}% | <strong>RAM:</strong> ${f.ram_percent || 0}% | <strong>USB Count:</strong> ${f.usb_count || 0}`;
+          }
+          content.innerHTML = alertText;
         } else {
           banner.style.display = 'none';
         }
@@ -1053,6 +1096,223 @@
     checkMLStats();
     setInterval(checkMLStats, 5000);
 
+    // --- Network Graph ---
+    let networkGraph = null;
+    let gnnNodes = null;
+    let gnnEdges = null;
+    let cachedLANData = null;
+
+    async function fetchLANTopology() {
+      try {
+        const res = await fetch('/api/network/scan');
+        if (res.ok) {
+          cachedLANData = await res.json();
+          // Update graph immediately to reflect new LAN data
+          if (networkGraph !== null) {
+             fetchGNNGraph();
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch LAN topology:', e);
+      }
+    }
+
+    async function fetchGNNGraph() {
+      if (activeTab !== 'gnn') return;
+      try {
+        const res = await fetch('/api/security/network_graph');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        const container = document.getElementById('network-graph-container');
+        
+        if (!data.nodes || data.nodes.length === 0) {
+           if (networkGraph) { networkGraph.destroy(); networkGraph = null; gnnNodes = null; gnnEdges = null; }
+           container.innerHTML = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px;">'
+             + '<div style="font-size: 2rem;">🔄</div>'
+             + '<div style="color: var(--muted); text-align: center;">Collecting network data...<br><span style="font-size:0.8rem;">The graph will appear after the first connections are detected.</span></div>'
+             + '</div>';
+           document.getElementById('gnnTimestamp').innerText = "Waiting for data...";
+           return;
+        }
+
+        const anomalyCount = data.edges.filter(e => e.is_anomaly).length;
+        const totalEdges = data.edges.length;
+        document.getElementById('gnnTimestamp').innerHTML =
+          `<span style="color:var(--green)">${totalEdges - anomalyCount} normal</span> · ` +
+          `<span style="color:var(--red)">${anomalyCount} anomal${anomalyCount === 1 ? 'y' : 'ies'}</span> · ` +
+          `${data.nodes.length} hosts · ` +
+          new Date().toLocaleTimeString();
+
+        // Build desired node & edge arrays
+        const newNodes = data.nodes.map(n => ({
+          id: n.id,
+          label: n.label,
+          shape: 'dot',
+          size: 14,
+          color: {
+            background: n.label.startsWith('127.') || n.label.startsWith('192.168.') || n.label.startsWith('10.') || n.label === '::1' ? '#1a3a5c' : '#121a27',
+            border: n.label.startsWith('127.') || n.label.startsWith('192.168.') || n.label.startsWith('10.') || n.label === '::1' ? '#32d5ff' : '#263244',
+            highlight: { background: '#1e4a70', border: '#32d5ff' }
+          },
+          font: { color: '#e6edf7', size: 11 }
+        }));
+
+        const newEdges = data.edges.map((e, i) => ({
+          id: `conn_${e.from}→${e.to}`,
+          from: e.from,
+          to: e.to,
+          title: `${e.process || 'Unknown'} (score: ${(e.score || 0).toFixed(2)})`,
+          color: e.is_anomaly
+            ? { color: '#ff5c7a', highlight: '#ff5c7a', opacity: 1.0 }
+            : { color: '#2a6e4a', highlight: '#42f59b', opacity: 0.6 },
+          width: e.is_anomaly ? 3 : 1,
+          dashes: e.is_anomaly ? [8, 4] : false,
+          smooth: { type: 'continuous' }
+        }));
+
+        // Merge Physical LAN topology if available
+        if (cachedLANData && cachedLANData.targets && cachedLANData.gateway_ip) {
+          const gatewayIP = cachedLANData.gateway_ip;
+          const existingNodeIDs = new Set(newNodes.map(n => n.id));
+          
+          cachedLANData.targets.forEach(target => {
+            const isGateway = (target.ip === gatewayIP);
+            const isSelf = (target.description === "This monitoring device");
+            
+            // Add node if not already in graph (from ML)
+            if (!existingNodeIDs.has(target.ip)) {
+              newNodes.push({
+                id: target.ip,
+                label: isSelf ? `${target.name || target.ip}\n(ME)` : (target.name || target.ip),
+                shape: isGateway ? 'square' : (isSelf ? 'star' : 'dot'),
+                size: isGateway ? 20 : (isSelf ? 24 : 12),
+                color: {
+                  background: isGateway ? '#d97736' : (isSelf ? '#32a852' : '#2b394a'),
+                  border: isGateway ? '#ff9a55' : (isSelf ? '#5cf284' : '#3d526a'),
+                  highlight: { background: isGateway ? '#f08a46' : (isSelf ? '#5cf284' : '#3d526a'), border: '#fff' }
+                },
+                font: { color: isSelf ? '#5cf284' : '#e6edf7', size: isSelf ? 13 : 11, bold: isSelf }
+              });
+              existingNodeIDs.add(target.ip);
+            } else {
+              // Update existing ML node to look like the gateway or self
+              const node = newNodes.find(n => n.id === target.ip);
+              if (node) {
+                if (isSelf) {
+                  node.label = `${node.label}\n(ME)`;
+                  node.shape = 'star';
+                  node.size = 24;
+                  node.color = { background: '#32a852', border: '#5cf284', highlight: { background: '#5cf284', border: '#fff' } };
+                  node.font = { color: '#5cf284', size: 13, bold: true };
+                } else if (isGateway) {
+                  node.shape = 'square';
+                  node.size = 20;
+                  node.color = { background: '#d97736', border: '#ff9a55', highlight: { background: '#f08a46', border: '#fff' } };
+                }
+              }
+            }
+
+            // Draw edge to gateway if not the gateway itself
+            if (!isGateway && gatewayIP) {
+              newEdges.push({
+                id: `lan_${target.ip}→${gatewayIP}`,
+                from: target.ip,
+                to: gatewayIP,
+                title: 'Physical LAN Connection',
+                color: { color: '#556982', opacity: 0.4 },
+                width: 1,
+                dashes: true,
+                smooth: false, // Straight lines for physical connections
+                arrows: { to: { enabled: false } }
+              });
+            }
+          });
+        }
+
+        if (networkGraph === null) {
+          // First render — create the vis.Network
+          container.innerHTML = '';
+          gnnNodes = new vis.DataSet(newNodes);
+          gnnEdges = new vis.DataSet(newEdges);
+
+          const options = {
+            physics: {
+              stabilization: { iterations: 100 },
+              barnesHut: {
+                gravitationalConstant: -3000,
+                springConstant: 0.04,
+                springLength: 120,
+                damping: 0.09
+              }
+            },
+            interaction: { hover: true, tooltipDelay: 200 },
+            edges: {
+              font: { align: 'top', color: '#8b9bb2', size: 9, strokeWidth: 0 },
+              arrows: { to: { enabled: true, scaleFactor: 0.4 } }
+            },
+            nodes: { borderWidth: 2 }
+          };
+
+          networkGraph = new vis.Network(container, { nodes: gnnNodes, edges: gnnEdges }, options);
+        } else {
+          // Incremental update — add/update/remove without re-layout
+          const existingNodeIds = new Set(gnnNodes.getIds());
+          const desiredNodeIds = new Set(newNodes.map(n => n.id));
+
+          // Remove stale nodes
+          for (const id of existingNodeIds) {
+            if (!desiredNodeIds.has(id)) gnnNodes.remove(id);
+          }
+          // Add or update nodes
+          for (const n of newNodes) {
+            if (existingNodeIds.has(n.id)) {
+              gnnNodes.update(n);
+            } else {
+              gnnNodes.add(n);
+            }
+          }
+
+          const existingEdgeIds = new Set(gnnEdges.getIds());
+          const desiredEdgeIds = new Set(newEdges.map(e => e.id));
+
+          for (const id of existingEdgeIds) {
+            if (!desiredEdgeIds.has(id)) gnnEdges.remove(id);
+          }
+          for (const e of newEdges) {
+            if (existingEdgeIds.has(e.id)) {
+              gnnEdges.update(e);
+            } else {
+              gnnEdges.add(e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch GNN graph:', e);
+      }
+    }
+    
+    async function resetNetworkGraph() {
+      try {
+        const res = await fetch('/api/security/network_graph/reset', { method: 'POST' });
+        if (res.ok) {
+          alert('Network graph reset requested. The monitor will clear the current GNN model and start collecting a new baseline.');
+          fetchGNNGraph(); // Update immediately (will likely be empty)
+        } else {
+          alert('Failed to reset network graph.');
+        }
+      } catch (e) {
+        console.error('Error resetting network graph:', e);
+        alert('Error resetting network graph.');
+      }
+    }
+
+    setInterval(fetchGNNGraph, 5000);
+    
+    // Initial fetch of LAN Topology
+    fetchLANTopology();
+    setInterval(fetchLANTopology, 60000);
+
     // --- Anomaly History ---
     let anomalyHistoryData = [];
     let expandedHistoryIdx = -1;
@@ -1123,10 +1383,19 @@
         const isExpanded = expandedHistoryIdx === idx;
 
         // Process summary: top 3 names
-        const procSummary = procs.slice(0, 3).map(p =>
-          `${escapeHtml(p.name)} (${p.cpu_percent}%)`
-        ).join(', ');
-        const moreCount = procs.length > 3 ? ` +${procs.length - 3} more` : '';
+        let procSummary = "";
+        let moreCount = "";
+        
+        if (entry.type === "new_node") {
+            procSummary = `<strong>New Node:</strong> ${escapeHtml(entry.node_ip)}`;
+        } else if (entry.type === "network") {
+            procSummary = `<strong>Network:</strong> ${escapeHtml(entry.connection.local_ip)} &lt;-&gt; ${escapeHtml(entry.connection.remote_ip)}`;
+        } else {
+            procSummary = procs.slice(0, 3).map(p =>
+                `${escapeHtml(p.name)} (${p.cpu_percent}%)`
+            ).join(', ');
+            moreCount = procs.length > 3 ? ` +${procs.length - 3} more` : '';
+        }
 
         let row = `<tr class="clickable-row" onclick="toggleHistoryRow(${idx})" title="Click to see all processes">
           <td>${escapeHtml(entry.timestamp)}</td>
